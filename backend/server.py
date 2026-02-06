@@ -267,9 +267,12 @@ async def add_url_document(input_data: URLInput):
         # Extract main content using enhanced methods
         content = extract_main_content(response.text, input_data.url)
         
+        if not content or len(content.strip()) < 100:
+            raise HTTPException(status_code=400, detail="Unable to extract meaningful content from URL")
+        
         # Analyze content context
         context_info = analyze_content_context(content)
-        logger.info(f"Content analysis for {input_data.url}: {context_info}")
+        logger.info(f"Content context: {context_info}")
         
         sentences = extract_sentences(content)
         title = input_data.url.split('//')[-1].split('/')[0]
