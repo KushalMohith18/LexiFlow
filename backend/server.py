@@ -214,19 +214,32 @@ async def chat_with_ai(request: ChatRequest):
         system_prompt = f"You are a helpful AI assistant. Answer questions based on this documentation:\n\n{context}"
         
         if request.model.startswith('gpt'):
-            response = openai_client.chat.completions.create(
-                model="gpt-4o",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": request.message}
-                ]
-            )
-            answer = response.choices[0].message.content
+            try:
+                response = openai_client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": request.message}
+                    ],
+                    timeout=30
+                )
+                answer = response.choices[0].message.content
+            except Exception as e:
+                logger.error(f"OpenAI chat error: {str(e)}")
+                if "429" in str(e) or "rate_limit" in str(e).lower():
+                    raise HTTPException(status_code=429, detail="OpenAI API rate limit exceeded. Please try Gemini model or wait a few minutes.")
+                raise
         else:
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
-            prompt = f"{system_prompt}\n\nUser: {request.message}"
-            response = model.generate_content(prompt)
-            answer = response.text
+            try:
+                prompt = f"{system_prompt}\n\nUser: {request.message}"
+                response = gemini_client.models.generate_content(
+                    model='gemini-2.0-flash-exp',
+                    contents=prompt
+                )
+                answer = response.text
+            except Exception as e:
+                logger.error(f"Gemini chat error: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Gemini API error: {str(e)}")
         
         msg_data = {
             "document_id": request.document_id,
@@ -239,7 +252,10 @@ async def chat_with_ai(request: ChatRequest):
         msg_dict['created_at'] = msg_dict['created_at'].isoformat()
         await db.chat_messages.insert_one(msg_dict)
         return msg
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Chat error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/chat/{document_id}", response_model=List[ChatMessage])
