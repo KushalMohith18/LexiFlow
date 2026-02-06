@@ -32,6 +32,7 @@ export default function Reader() {
   const [chatInput, setChatInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
   const [selectedModel, setSelectedModel] = useState("gpt-4o");
+  const [ttsProvider, setTtsProvider] = useState("openai");
   const [useBrowserTTS, setUseBrowserTTS] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   
