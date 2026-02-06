@@ -283,7 +283,11 @@ async def add_url_document(input_data: URLInput):
         doc_dict['created_at'] = doc_dict['created_at'].isoformat()
         await db.documents.insert_one(doc_dict)
         return doc
+    except requests.RequestException as e:
+        logger.error(f"Failed to fetch URL {input_data.url}: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {str(e)}")
     except Exception as e:
+        logger.error(f"Error processing URL {input_data.url}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.get("/documents", response_model=List[Document])
