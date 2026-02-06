@@ -101,6 +101,9 @@ export default function Reader() {
       }
     } catch (error) {
       console.error("TTS failed, falling back to browser TTS", error);
+      if (error.response?.status === 429) {
+        toast.error("OpenAI rate limit reached. Switching to browser TTS.");
+      }
       setUseBrowserTTS(true);
       playWithBrowserTTS(text);
     }
