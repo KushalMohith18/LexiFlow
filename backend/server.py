@@ -257,8 +257,11 @@ async def upload_document(file: UploadFile = File(...)):
 @api_router.post("/documents/url", response_model=Document)
 async def add_url_document(input_data: URLInput):
     try:
-        # Fetch HTML content
-        response = requests.get(input_data.url, timeout=10)
+        # Fetch the URL content
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(input_data.url, timeout=15, headers=headers)
         response.raise_for_status()
         
         # Extract main content using enhanced methods
