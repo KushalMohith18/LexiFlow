@@ -18,7 +18,8 @@ import markdown
 from bs4 import BeautifulSoup
 import requests
 from openai import OpenAI
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -28,7 +29,7 @@ client_db = AsyncIOMotorClient(mongo_url)
 db = client_db[os.environ['DB_NAME']]
 
 openai_client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
-genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+gemini_client = genai.Client(api_key=os.environ.get('GEMINI_API_KEY'))
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
