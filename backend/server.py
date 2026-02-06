@@ -331,7 +331,7 @@ async def text_to_speech(request: TTSRequest):
                 tts_prompt = f"Read this text clearly: {request.text[:4000]}"
                 
                 response = gemini_client.models.generate_content(
-                    model='gemini-2.5-flash-tts',
+                    model='gemini-2.5-flash-preview-tts',
                     contents=tts_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["AUDIO"],
