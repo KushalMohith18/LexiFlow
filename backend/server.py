@@ -198,7 +198,10 @@ async def text_to_speech(request: TTSRequest):
         audio_bytes.seek(0)
         return StreamingResponse(audio_bytes, media_type="audio/mpeg")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"TTS error: {str(e)}")
+        if "429" in str(e) or "rate_limit" in str(e).lower():
+            raise HTTPException(status_code=429, detail="OpenAI API rate limit exceeded. Please try browser TTS or wait a few minutes.")
+        raise HTTPException(status_code=500, detail=f"TTS failed: {str(e)}")
 
 @api_router.post("/chat", response_model=ChatMessage)
 async def chat_with_ai(request: ChatRequest):
