@@ -104,16 +104,122 @@ def extract_text_from_markdown(file_bytes: bytes) -> str:
     html = markdown.markdown(md_text)
     return BeautifulSoup(html, 'html.parser').get_text()
 
-def scrape_url_content(url: str) -> str:
+def extract_main_content(html: str, url: str) -> str:
+    """
+    Extract main content from HTML using multiple methods.
+    This removes ads, navigation, footers, and other non-content elements.
+    """
     try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, 'html.parser')
-        for script in soup(["script", "style"]):
-            script.decompose()
-        return soup.get_text(separator='\n', strip=True)
+        # Method 1: Trafilatura (best for news/documentation sites)
+        extracted = trafilatura.extract(html, include_comments=False, include_tables=True)
+        if extracted and len(extracted.strip()) > 200:
+            logger.info(f"Content extracted using Trafilatura: {len(extracted)} chars")
+            return extracted
+        
+        # Method 2: Readability (Mozilla's algorithm)
+        doc = ReadabilityDocument(html)
+        readable_html = doc.summary()
+        
+        # Convert HTML to clean text
+        h = html2text.HTML2Text()
+        h.ignore_links = False
+        h.ignore_images = True
+        h.ignore_emphasis = False
+        readable_text = h.handle(readable_html)
+        
+        if len(readable_text.strip()) > 200:
+            logger.info(f"Content extracted using Readability: {len(readable_text)} chars")
+            return readable_text
+        
+        # Method 3: Custom heuristic fallback
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        # Remove unwanted elements
+        for element in soup(['script', 'style', 'nav', 'header', 'footer', 
+                           'aside', 'iframe', 'noscript', 'meta', 'link']):
+            element.decompose()
+        
+        # Remove common ad/navigation classes
+        ad_patterns = ['ad', 'advertisement', 'banner', 'sidebar', 'menu', 
+                      'navigation', 'nav', 'social', 'share', 'comment', 
+                      'related', 'recommended', 'popup', 'modal', 'cookie']
+        
+        for pattern in ad_patterns:
+            for element in soup.find_all(class_=lambda x: x and pattern in x.lower()):
+                element.decompose()
+            for element in soup.find_all(id=lambda x: x and pattern in x.lower()):
+                element.decompose()
+        
+        # Try to find main content areas
+        main_content = (
+            soup.find('main') or 
+            soup.find('article') or 
+            soup.find('div', class_=lambda x: x and ('content' in x.lower() or 'article' in x.lower())) or
+            soup.find('div', id=lambda x: x and ('content' in x.lower() or 'article' in x.lower())) or
+            soup.body
+        )
+        
+        if main_content:
+            text = main_content.get_text(separator='\n', strip=True)
+            # Clean up extra whitespace
+            text = '\n'.join(line.strip() for line in text.split('\n') if line.strip())
+            logger.info(f"Content extracted using custom heuristic: {len(text)} chars")
+            return text
+        
+        # Ultimate fallback
+        text = soup.get_text(separator='\n', strip=True)
+        return '\n'.join(line.strip() for line in text.split('\n') if line.strip())
+        
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to scrape URL: {str(e)}")
+        logger.error(f"Content extraction error: {str(e)}")
+        # Final fallback to basic text extraction
+        soup = BeautifulSoup(html, 'html.parser')
+        return soup.get_text(separator='\n', strip=True)
+
+def analyze_content_context(text: str) -> dict:
+    """
+    Analyze content to identify context without using AI.
+    Returns metadata about the content type and structure.
+    """
+    text_lower = text.lower()
+    word_count = len(text.split())
+    
+    # Identify content type based on keywords
+    context = {
+        "type": "general",
+        "topics": [],
+        "word_count": word_count,
+        "has_code": False,
+        "has_headings": False,
+        "technical_level": "medium"
+    }
+    
+    # Check for code documentation
+    code_indicators = ['function', 'class', 'import', 'const', 'var', 'def', 'return', 
+                      'api', 'endpoint', 'parameter', 'method', 'syntax']
+    code_count = sum(1 for indicator in code_indicators if indicator in text_lower)
+    if code_count >= 3:
+        context["type"] = "technical_documentation"
+        context["has_code"] = True
+        context["technical_level"] = "high"
+    
+    # Check for tutorial/guide
+    tutorial_indicators = ['step', 'tutorial', 'guide', 'how to', 'getting started', 
+                          'example', 'follow', 'first', 'next']
+    tutorial_count = sum(1 for indicator in tutorial_indicators if indicator in text_lower)
+    if tutorial_count >= 3:
+        context["type"] = "tutorial"
+    
+    # Check for API documentation
+    if any(word in text_lower for word in ['api', 'endpoint', 'request', 'response', 'json']):
+        if "api" in text_lower and ("endpoint" in text_lower or "request" in text_lower):
+            context["type"] = "api_documentation"
+    
+    # Detect headings presence
+    if any(marker in text for marker in ['#', '===', '---']) or '\n\n' in text:
+        context["has_headings"] = True
+    
+    return context
 
 @api_router.post("/documents/upload", response_model=Document)
 async def upload_document(file: UploadFile = File(...)):
