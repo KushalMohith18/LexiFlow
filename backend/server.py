@@ -81,6 +81,7 @@ class ChatRequest(BaseModel):
 class TTSRequest(BaseModel):
     text: str
     voice: Optional[str] = "alloy"
+    provider: Optional[str] = "openai"
 
 def extract_sentences(text: str) -> List[str]:
     text = re.sub(r'\s+', ' ', text).strip()
