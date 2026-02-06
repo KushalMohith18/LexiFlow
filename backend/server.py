@@ -324,20 +324,59 @@ async def delete_document(doc_id: str):
 @api_router.post("/tts")
 async def text_to_speech(request: TTSRequest):
     try:
-        response = openai_client.audio.speech.create(
-            model="tts-1",
-            voice=request.voice,
-            input=request.text[:4096]
-        )
-        audio_bytes = io.BytesIO()
-        for chunk in response.iter_bytes():
-            audio_bytes.write(chunk)
-        audio_bytes.seek(0)
-        return StreamingResponse(audio_bytes, media_type="audio/mpeg")
+        if request.provider == "gemini":
+            # Use Gemini TTS
+            try:
+                # Prepare the prompt for natural TTS
+                tts_prompt = f"Please read the following text in a clear, natural voice: {request.text[:4000]}"
+                
+                response = gemini_client.models.generate_content(
+                    model='gemini-2.0-flash-exp',
+                    contents=tts_prompt,
+                    config=types.GenerateContentConfig(
+                        response_modalities=["AUDIO"],
+                        speech_config=types.SpeechConfig(
+                            voice_config=types.VoiceConfig(
+                                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                                    voice_name="Kore"
+                                )
+                            )
+                        )
+                    )
+                )
+                
+                # Extract audio data
+                if hasattr(response, 'candidates') and response.candidates:
+                    for part in response.candidates[0].content.parts:
+                        if hasattr(part, 'inline_data') and part.inline_data:
+                            audio_bytes = io.BytesIO(part.inline_data.data)
+                            return StreamingResponse(audio_bytes, media_type="audio/wav")
+                
+                raise Exception("No audio data in Gemini response")
+                
+            except Exception as gemini_error:
+                logger.error(f"Gemini TTS error: {str(gemini_error)}")
+                raise HTTPException(status_code=500, detail=f"Gemini TTS failed: {str(gemini_error)}")
+        
+        else:
+            # Use OpenAI TTS (default)
+            response = openai_client.audio.speech.create(
+                model="tts-1",
+                voice=request.voice,
+                input=request.text[:4096]
+            )
+            audio_bytes = io.BytesIO()
+            for chunk in response.iter_bytes():
+                audio_bytes.write(chunk)
+            audio_bytes.seek(0)
+            return StreamingResponse(audio_bytes, media_type="audio/mpeg")
+            
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"TTS error: {str(e)}")
         if "429" in str(e) or "rate_limit" in str(e).lower():
-            raise HTTPException(status_code=429, detail="OpenAI API rate limit exceeded. Please try browser TTS or wait a few minutes.")
+            raise HTTPException(status_code=429, detail="API rate limit exceeded. Please try Gemini TTS or browser TTS.")
         raise HTTPException(status_code=500, detail=f"TTS failed: {str(e)}")
 
 @api_router.post("/chat", response_model=ChatMessage)
