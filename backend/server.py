@@ -328,10 +328,10 @@ async def text_to_speech(request: TTSRequest):
             # Use Gemini TTS
             try:
                 # Prepare the prompt for natural TTS
-                tts_prompt = f"Please read the following text in a clear, natural voice: {request.text[:4000]}"
+                tts_prompt = f"Read this text clearly: {request.text[:4000]}"
                 
                 response = gemini_client.models.generate_content(
-                    model='gemini-2.0-flash-exp',
+                    model='gemini-2.5-flash-tts',
                     contents=tts_prompt,
                     config=types.GenerateContentConfig(
                         response_modalities=["AUDIO"],
@@ -350,6 +350,7 @@ async def text_to_speech(request: TTSRequest):
                     for part in response.candidates[0].content.parts:
                         if hasattr(part, 'inline_data') and part.inline_data:
                             audio_bytes = io.BytesIO(part.inline_data.data)
+                            logger.info(f"Gemini TTS success: {len(part.inline_data.data)} bytes")
                             return StreamingResponse(audio_bytes, media_type="audio/wav")
                 
                 raise Exception("No audio data in Gemini response")
