@@ -91,7 +91,10 @@ export default function Reader() {
 
   const playWithOpenAITTS = async (text) => {
     try {
-      const response = await axios.post(`${API}/tts`, { text }, {
+      const response = await axios.post(`${API}/tts`, { 
+        text, 
+        provider: ttsProvider 
+      }, {
         responseType: 'blob',
       });
       const audioUrl = URL.createObjectURL(response.data);
@@ -103,7 +106,9 @@ export default function Reader() {
     } catch (error) {
       console.error("TTS failed, falling back to browser TTS", error);
       if (error.response?.status === 429) {
-        toast.error("OpenAI rate limit reached. Switching to browser TTS.");
+        toast.error(`${ttsProvider === 'openai' ? 'OpenAI' : 'Gemini'} rate limit reached. Switching to browser TTS.`);
+      } else {
+        toast.error(`${ttsProvider === 'openai' ? 'OpenAI' : 'Gemini'} TTS failed. Using browser TTS.`);
       }
       setUseBrowserTTS(true);
       playWithBrowserTTS(text);
