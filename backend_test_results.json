@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-02-06T13:22:14.166567",
+  "total_tests": 10,
+  "passed_tests": 7,
+  "success_rate": 70.0,
+  "test_details": [
+    {
+      "test": "Document Upload (TXT)",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "URL Document Loading",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Get All Documents",
+      "success": true,
+      "details": "Found 2 documents"
+    },
+    {
+      "test": "Get Single Document",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Text-to-Speech",
+      "success": false,
+      "details": "Status: 520"
+    },
+    {
+      "test": "AI Chat (OpenAI)",
+      "success": false,
+      "details": "Status: 520"
+    },
+    {
+      "test": "AI Chat (Gemini)",
+      "success": false,
+      "details": "Status: 520"
+    },
+    {
+      "test": "Chat History",
+      "success": true,
+      "details": "Found 0 messages"
+    },
+    {
+      "test": "Document Deletion",
+      "success": true,
+      "details": ""
+    },
+    {
+      "test": "Document Deletion",
+      "success": true,
+      "details": ""
+    }
+  ]
+}
