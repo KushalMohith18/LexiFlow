@@ -1,0 +1,111 @@
+{
+  "identity": {
+    "name": "LexiFlow",
+    "persona": "E1: The Anti-AI Designer",
+    "tone": "Focus, Flow, Intelligence, Cyber-Minimalism",
+    "description": "A documentation reader that feels like a premium listening experience. Dark, immersive, and rhythm-based."
+  },
+  "typography": {
+    "primary_font": "DM Sans",
+    "heading_font": "Space Grotesk",
+    "mono_font": "JetBrains Mono",
+    "scale": {
+      "h1": "text-5xl md:text-7xl font-bold tracking-tighter",
+      "h2": "text-3xl md:text-5xl font-semibold tracking-tight",
+      "body": "text-base md:text-lg leading-relaxed",
+      "reader_active": "text-2xl md:text-3xl font-medium leading-normal",
+      "reader_passive": "text-xl md:text-2xl text-muted-foreground blur-[0.5px] transition-all duration-300"
+    },
+    "imports": [
+      "@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=DM+Sans:opsz,wght@9..40,100..1000&family=JetBrains+Mono:wght@400;500&display=swap');"
+    ]
+  },
+  "colors": {
+    "theme": "dark",
+    "palette": {
+      "background": "#050505",
+      "foreground": "#FAFAFA",
+      "card": "#0A0A0A",
+      "card_foreground": "#FFFFFF",
+      "primary": "#6D28D9",
+      "primary_foreground": "#FFFFFF",
+      "secondary": "#1F1F22",
+      "secondary_foreground": "#E5E7EB",
+      "accent": "#00F0FF",
+      "accent_foreground": "#000000",
+      "muted": "#171717",
+      "muted_foreground": "#737373",
+      "border": "#262626",
+      "input": "#262626",
+      "ring": "#6D28D9"
+    },
+    "gradients": {
+      "hero_glow": "radial-gradient(circle at 50% 50%, rgba(109, 40, 217, 0.15) 0%, rgba(5, 5, 5, 0) 50%)",
+      "active_line": "linear-gradient(90deg, rgba(109, 40, 217, 0.1) 0%, rgba(5, 5, 5, 0) 100%)"
+    }
+  },
+  "layout": {
+    "spacing": {
+      "container_padding": "p-6 md:p-12 lg:p-24",
+      "section_gap": "gap-12 md:gap-24",
+      "element_gap": "gap-4 md:gap-8"
+    },
+    "grid_system": "grid grid-cols-1 md:grid-cols-12 gap-6",
+    "border_radius": {
+      "default": "rounded-xl",
+      "card": "rounded-2xl",
+      "button": "rounded-full"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary hover:bg-primary/90 text-white rounded-full px-8 py-6 font-medium transition-all hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(109,40,217,0.3)]",
+      "secondary": "bg-secondary hover:bg-secondary/80 text-white rounded-full px-6 py-4 font-medium border border-white/5"
+    },
+    "cards": {
+      "glass": "bg-black/40 backdrop-blur-xl border border-white/10 shadow-2xl",
+      "solid": "bg-[#0A0A0A] border border-white/5"
+    },
+    "inputs": {
+      "default": "bg-secondary/50 border-transparent focus:border-primary/50 focus:ring-1 focus:ring-primary/50 rounded-xl h-12 px-4 transition-all"
+    },
+    "reader_view": {
+      "container": "max-w-3xl mx-auto h-[70vh] overflow-y-auto scroll-smooth no-scrollbar mask-image-gradient",
+      "active_sentence": "text-white scale-105 origin-left font-medium py-4 pl-4 border-l-4 border-primary bg-gradient-to-r from-primary/10 to-transparent",
+      "passive_sentence": "text-white/30 py-2 pl-4 border-l-4 border-transparent hover:text-white/50 transition-colors cursor-pointer"
+    }
+  },
+  "assets": {
+    "images": {
+      "hero_abstract": "https://images.unsplash.com/photo-1767479524590-8a8974616d72?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "user_context": "https://images.unsplash.com/photo-1748792321323-25d97044ba2c?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "logo_placeholder": "https://via.placeholder.com/150x50?text=LexiFlow"
+    },
+    "icons": {
+      "library": "lucide-react",
+      "preferred_set": ["Play", "Pause", "FastForward", "Rewind", "Upload", "MessageSquare", "Settings", "Library", "Mic", "Volume2"]
+    }
+  },
+  "motion": {
+    "transitions": "transition-all duration-300 ease-out",
+    "hover_effects": "hover:-translate-y-1 hover:shadow-lg",
+    "micro_interactions": "active:scale-95"
+  },
+  "instructions_to_main_agent": [
+    "1. SETUP: Install 'lucide-react' and 'framer-motion'. Configure Tailwind with the colors provided in 'colors.palette'. Add the fonts to index.css.",
+    "2. THEME: Force Dark Mode by default. The app should feel like a 'Night Mode' IDE or Spotify.",
+    "3. READER UI: Implement the 'Spotify Lyrics' view. The active sentence must be vertically centered. Use 'scrollIntoView({ behavior: 'smooth', block: 'center' })' on the active element.",
+    "4. AUDIO PLAYER: Create a floating bottom bar (Glassmorphism) for playback controls. It should persist across pages.",
+    "5. AI CHAT: The chat sidebar should be collapsible. When open, it pushes the reader content or overlays with a glass effect. Use 'Space Grotesk' for the 'AI is thinking...' states.",
+    "6. LANDING PAGE: Use the 'hero_abstract' image as a subtle background with low opacity (20%) and a radial gradient overlay. Big, bold typography.",
+    "7. ACCESSIBILITY: Ensure high contrast. The 'passive' text in the reader must still be readable (min contrast 4.5:1 against bg) - adjust opacity if needed."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "DO NOT use gradients for text color.",
+    "DO NOT use generic 'Inter' font. Use the specified fonts.",
+    "Ensure all interactive elements have 'data-testid'.",
+    "Use 'sonner' for toasts.",
+    "Use 'lucide-react' for icons.",
+    "Avoid 'container' class for main layouts; use custom max-width wrappers for better control."
+  ]
+}
