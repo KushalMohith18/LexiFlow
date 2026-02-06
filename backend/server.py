@@ -20,6 +20,9 @@ import requests
 from openai import OpenAI
 from google import genai
 from google.genai import types
+import trafilatura
+from readability import Document as ReadabilityDocument
+import html2text
 
 # Configure logging
 logging.basicConfig(
