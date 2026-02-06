@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -6,67 +7,247 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+from typing import List, Optional
 import uuid
 from datetime import datetime, timezone
-
+import io
+import re
+import PyPDF2
+import docx
+import markdown
+from bs4 import BeautifulSoup
+import requests
+from openai import OpenAI
+import google.generativeai as genai
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
 mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+client_db = AsyncIOMotorClient(mongo_url)
+db = client_db[os.environ['DB_NAME']]
 
-# Create the main app without a prefix
+openai_client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
+genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+
 app = FastAPI()
-
-# Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
+class Document(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    title: str
+    content: str
+    sentences: List[str]
+    source_type: str
+    source_url: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+class DocumentCreate(BaseModel):
+    title: str
+    content: str
+    source_type: str
+    source_url: Optional[str] = None
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+class URLInput(BaseModel):
+    url: str
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
+class ChatMessage(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    document_id: str
+    role: str
+    content: str
+    model: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+class ChatRequest(BaseModel):
+    document_id: str
+    message: str
+    model: str
+    context: Optional[str] = None
 
-# Include the router in the main app
+class TTSRequest(BaseModel):
+    text: str
+    voice: Optional[str] = "alloy"
+
+def extract_sentences(text: str) -> List[str]:
+    text = re.sub(r'\s+', ' ', text).strip()
+    sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', text)
+    return [s.strip() for s in sentences if s.strip()]
+
+def extract_text_from_pdf(file_bytes: bytes) -> str:
+    pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
+    text = ""
+    for page in pdf_reader.pages:
+        text += page.extract_text() + "\n"
+    return text
+
+def extract_text_from_docx(file_bytes: bytes) -> str:
+    doc = docx.Document(io.BytesIO(file_bytes))
+    return "\n".join([para.text for para in doc.paragraphs])
+
+def extract_text_from_markdown(file_bytes: bytes) -> str:
+    md_text = file_bytes.decode('utf-8')
+    html = markdown.markdown(md_text)
+    return BeautifulSoup(html, 'html.parser').get_text()
+
+def scrape_url_content(url: str) -> str:
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        for script in soup(["script", "style"]):
+            script.decompose()
+        return soup.get_text(separator='\n', strip=True)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to scrape URL: {str(e)}")
+
+@api_router.post("/documents/upload", response_model=Document)
+async def upload_document(file: UploadFile = File(...)):
+    try:
+        file_bytes = await file.read()
+        filename = file.filename.lower()
+        
+        if filename.endswith('.pdf'):
+            content = extract_text_from_pdf(file_bytes)
+        elif filename.endswith('.docx'):
+            content = extract_text_from_docx(file_bytes)
+        elif filename.endswith(('.md', '.markdown')):
+            content = extract_text_from_markdown(file_bytes)
+        elif filename.endswith('.txt'):
+            content = file_bytes.decode('utf-8')
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported file format")
+        
+        sentences = extract_sentences(content)
+        doc_data = {
+            "title": file.filename,
+            "content": content,
+            "sentences": sentences,
+            "source_type": "file",
+            "source_url": None
+        }
+        doc = Document(**doc_data)
+        doc_dict = doc.model_dump()
+        doc_dict['created_at'] = doc_dict['created_at'].isoformat()
+        await db.documents.insert_one(doc_dict)
+        return doc
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/documents/url", response_model=Document)
+async def add_url_document(input_data: URLInput):
+    try:
+        content = scrape_url_content(input_data.url)
+        sentences = extract_sentences(content)
+        title = input_data.url.split('//')[-1].split('/')[0]
+        
+        doc_data = {
+            "title": title,
+            "content": content,
+            "sentences": sentences,
+            "source_type": "url",
+            "source_url": input_data.url
+        }
+        doc = Document(**doc_data)
+        doc_dict = doc.model_dump()
+        doc_dict['created_at'] = doc_dict['created_at'].isoformat()
+        await db.documents.insert_one(doc_dict)
+        return doc
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/documents", response_model=List[Document])
+async def get_documents():
+    docs = await db.documents.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    for doc in docs:
+        if isinstance(doc['created_at'], str):
+            doc['created_at'] = datetime.fromisoformat(doc['created_at'])
+    return docs
+
+@api_router.get("/documents/{doc_id}", response_model=Document)
+async def get_document(doc_id: str):
+    doc = await db.documents.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if isinstance(doc['created_at'], str):
+        doc['created_at'] = datetime.fromisoformat(doc['created_at'])
+    return doc
+
+@api_router.delete("/documents/{doc_id}")
+async def delete_document(doc_id: str):
+    result = await db.documents.delete_one({"id": doc_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Document not found")
+    await db.chat_messages.delete_many({"document_id": doc_id})
+    return {"message": "Document deleted"}
+
+@api_router.post("/tts")
+async def text_to_speech(request: TTSRequest):
+    try:
+        response = openai_client.audio.speech.create(
+            model="tts-1",
+            voice=request.voice,
+            input=request.text[:4096]
+        )
+        audio_bytes = io.BytesIO()
+        for chunk in response.iter_bytes():
+            audio_bytes.write(chunk)
+        audio_bytes.seek(0)
+        return StreamingResponse(audio_bytes, media_type="audio/mpeg")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/chat", response_model=ChatMessage)
+async def chat_with_ai(request: ChatRequest):
+    try:
+        doc = await db.documents.find_one({"id": request.document_id}, {"_id": 0})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        context = request.context or doc['content'][:8000]
+        system_prompt = f"You are a helpful AI assistant. Answer questions based on this documentation:\n\n{context}"
+        
+        if request.model.startswith('gpt'):
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": request.message}
+                ]
+            )
+            answer = response.choices[0].message.content
+        else:
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            prompt = f"{system_prompt}\n\nUser: {request.message}"
+            response = model.generate_content(prompt)
+            answer = response.text
+        
+        msg_data = {
+            "document_id": request.document_id,
+            "role": "assistant",
+            "content": answer,
+            "model": request.model
+        }
+        msg = ChatMessage(**msg_data)
+        msg_dict = msg.model_dump()
+        msg_dict['created_at'] = msg_dict['created_at'].isoformat()
+        await db.chat_messages.insert_one(msg_dict)
+        return msg
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/chat/{document_id}", response_model=List[ChatMessage])
+async def get_chat_history(document_id: str):
+    messages = await db.chat_messages.find(
+        {"document_id": document_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(100)
+    for msg in messages:
+        if isinstance(msg['created_at'], str):
+            msg['created_at'] = datetime.fromisoformat(msg['created_at'])
+    return messages
+
 app.include_router(api_router)
 
 app.add_middleware(
@@ -77,7 +258,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -86,4 +266,4 @@ logger = logging.getLogger(__name__)
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    client.close()
+    client_db.close()
