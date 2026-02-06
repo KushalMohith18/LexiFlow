@@ -196,8 +196,13 @@ export default function Reader() {
       });
       setChatMessages(prev => [...prev, response.data]);
     } catch (error) {
-      toast.error("Failed to get AI response");
       console.error(error);
+      if (error.response?.status === 429) {
+        toast.error(error.response?.data?.detail || "API rate limit exceeded. Try switching to Gemini model.");
+      } else {
+        toast.error("Failed to get AI response. Please check your API keys.");
+      }
+      setChatMessages(prev => prev.slice(0, -1));
     } finally {
       setIsChatLoading(false);
     }
