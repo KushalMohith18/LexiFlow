@@ -257,7 +257,17 @@ async def upload_document(file: UploadFile = File(...)):
 @api_router.post("/documents/url", response_model=Document)
 async def add_url_document(input_data: URLInput):
     try:
-        content = scrape_url_content(input_data.url)
+        # Fetch HTML content
+        response = requests.get(input_data.url, timeout=10)
+        response.raise_for_status()
+        
+        # Extract main content using enhanced methods
+        content = extract_main_content(response.text, input_data.url)
+        
+        # Analyze content context
+        context_info = analyze_content_context(content)
+        logger.info(f"Content analysis for {input_data.url}: {context_info}")
+        
         sentences = extract_sentences(content)
         title = input_data.url.split('//')[-1].split('/')[0]
         
