@@ -424,7 +424,7 @@ async def chat_with_ai(request: ChatRequest):
             try:
                 prompt = f"{system_prompt}\n\nUser: {request.message}"
                 response = gemini_client.models.generate_content(
-                    model='gemini-1.5-flash',
+                    model='models/gemini-1.5-flash',
                     contents=prompt
                 )
                 answer = response.text
