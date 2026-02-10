@@ -73,22 +73,28 @@ export default function IframeReader() {
 
   const checkIframeCompatibility = (url) => {
     // Try to load iframe and detect if blocked
+    if (typeof document === 'undefined') return;
+    
     const testIframe = document.createElement('iframe');
     testIframe.style.display = 'none';
     testIframe.src = url;
     testIframe.onload = () => {
       try {
-        testIframe.contentWindow.document;
+        testIframe.contentWindow?.document;
         setIframeBlocked(false);
       } catch (e) {
         setIframeBlocked(true);
         toast.error("This site blocks iframe embedding. Opening in new tab...");
       }
-      document.body.removeChild(testIframe);
+      if (testIframe.parentNode) {
+        testIframe.parentNode.removeChild(testIframe);
+      }
     };
     testIframe.onerror = () => {
       setIframeBlocked(true);
-      document.body.removeChild(testIframe);
+      if (testIframe.parentNode) {
+        testIframe.parentNode.removeChild(testIframe);
+      }
     };
     document.body.appendChild(testIframe);
   };
