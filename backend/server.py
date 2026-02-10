@@ -283,7 +283,8 @@ async def add_url_document(input_data: URLInput):
             "content": content,
             "sentences": sentences,
             "source_type": "url",
-            "source_url": input_data.url
+            "source_url": input_data.url,
+            "view_mode": "iframe"
         }
         doc = Document(**doc_data)
         doc_dict = doc.model_dump()
