@@ -52,6 +52,7 @@ class Document(BaseModel):
     sentences: List[str]
     source_type: str
     source_url: Optional[str] = None
+    view_mode: Optional[str] = "extracted"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class DocumentCreate(BaseModel):
