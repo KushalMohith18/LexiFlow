@@ -353,9 +353,19 @@ async def text_to_speech(request: TTSRequest):
                 if hasattr(response, 'candidates') and response.candidates:
                     for part in response.candidates[0].content.parts:
                         if hasattr(part, 'inline_data') and part.inline_data:
-                            audio_bytes = io.BytesIO(part.inline_data.data)
-                            logger.info(f"Gemini TTS success: {len(part.inline_data.data)} bytes")
-                            return StreamingResponse(audio_bytes, media_type="audio/wav")
+                            pcm_data = part.inline_data.data
+                            
+                            # Convert PCM to WAV with proper headers
+                            wav_buffer = io.BytesIO()
+                            with wave.open(wav_buffer, 'wb') as wav_file:
+                                wav_file.setnchannels(1)  # Mono
+                                wav_file.setsampwidth(2)  # 16-bit
+                                wav_file.setframerate(24000)  # 24kHz sample rate
+                                wav_file.writeframes(pcm_data)
+                            
+                            wav_buffer.seek(0)
+                            logger.info(f"Gemini TTS success: {len(pcm_data)} bytes PCM -> {wav_buffer.getbuffer().nbytes} bytes WAV")
+                            return StreamingResponse(wav_buffer, media_type="audio/wav")
                 
                 raise Exception("No audio data in Gemini response")
                 
