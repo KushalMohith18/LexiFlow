@@ -45,7 +45,7 @@ export default function Home() {
     try {
       const response = await axios.post(`${API}/documents/url`, { url });
       toast.success("URL content loaded successfully!");
-      navigate(`/reader/${response.data.id}`);
+      navigate(`/iframe-reader/${response.data.id}`);
     } catch (error) {
       toast.error("Failed to load URL content");
       console.error(error);
