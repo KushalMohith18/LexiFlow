@@ -94,7 +94,7 @@ export default function Library() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: index * 0.05 }}
-                onClick={() => navigate(`/reader/${doc.id}`)}
+                onClick={() => navigate(doc.view_mode === 'iframe' ? `/iframe-reader/${doc.id}` : `/reader/${doc.id}`)}
                 className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-2xl p-6 cursor-pointer hover:border-[#6D28D9]/50 transition-all hover:-translate-y-1 hover:shadow-lg group"
                 data-testid={`document-card-${index}`}
               >
