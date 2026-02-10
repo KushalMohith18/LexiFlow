@@ -141,25 +141,45 @@ class LexiFlowAPITester:
         """Test Text-to-Speech functionality"""
         print("\n🔍 Testing Text-to-Speech...")
         
+        # Test OpenAI TTS
         try:
             test_text = "Hello, this is a test of the text to speech functionality."
             response = requests.post(
                 f"{self.api_url}/tts",
-                json={"text": test_text, "voice": "alloy"},
+                json={"text": test_text, "voice": "alloy", "provider": "openai"},
                 timeout=30
             )
             
             if response.status_code == 200:
                 if response.headers.get('content-type') == 'audio/mpeg':
-                    self.log_test("Text-to-Speech", True)
-                    return True
+                    self.log_test("OpenAI TTS", True)
                 else:
-                    self.log_test("Text-to-Speech", False, "Invalid content type")
+                    self.log_test("OpenAI TTS", False, "Invalid content type")
             else:
-                self.log_test("Text-to-Speech", False, f"Status: {response.status_code}")
+                self.log_test("OpenAI TTS", False, f"Status: {response.status_code}")
                 
         except Exception as e:
-            self.log_test("Text-to-Speech", False, str(e))
+            self.log_test("OpenAI TTS", False, str(e))
+        
+        # Test Gemini TTS
+        try:
+            response = requests.post(
+                f"{self.api_url}/tts",
+                json={"text": test_text, "provider": "gemini"},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                if response.headers.get('content-type') == 'audio/wav':
+                    self.log_test("Gemini TTS", True)
+                    return True
+                else:
+                    self.log_test("Gemini TTS", False, "Invalid content type")
+            else:
+                self.log_test("Gemini TTS", False, f"Status: {response.status_code}")
+                
+        except Exception as e:
+            self.log_test("Gemini TTS", False, str(e))
         
         return False
 
