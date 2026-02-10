@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-06T13:22:14.166567",
+  "timestamp": "2026-02-10T07:05:56.467363",
   "total_tests": 10,
   "passed_tests": 7,
   "success_rate": 70.0,
@@ -17,7 +17,7 @@
     {
       "test": "Get All Documents",
       "success": true,
-      "details": "Found 2 documents"
+      "details": "Found 14 documents"
     },
     {
       "test": "Get Single Document",
@@ -27,12 +27,12 @@
     {
       "test": "Text-to-Speech",
       "success": false,
-      "details": "Status: 520"
+      "details": "Status: 429"
     },
     {
       "test": "AI Chat (OpenAI)",
       "success": false,
-      "details": "Status: 520"
+      "details": "Status: 429"
     },
     {
       "test": "AI Chat (Gemini)",
