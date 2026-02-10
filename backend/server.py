@@ -23,6 +23,8 @@ from google.genai import types
 import trafilatura
 from readability import Document as ReadabilityDocument
 import html2text
+import wave
+import struct
 
 # Configure logging
 logging.basicConfig(
