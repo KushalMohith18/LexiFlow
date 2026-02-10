@@ -73,30 +73,38 @@ export default function IframeReader() {
 
   const checkIframeCompatibility = (url) => {
     // Try to load iframe and detect if blocked
-    if (typeof document === 'undefined') return;
+    if (typeof window === 'undefined' || !window.document || !window.document.body) {
+      // Wait for DOM to be ready
+      setTimeout(() => checkIframeCompatibility(url), 100);
+      return;
+    }
     
-    const testIframe = document.createElement('iframe');
-    testIframe.style.display = 'none';
-    testIframe.src = url;
-    testIframe.onload = () => {
-      try {
-        testIframe.contentWindow?.document;
-        setIframeBlocked(false);
-      } catch (e) {
+    try {
+      const testIframe = window.document.createElement('iframe');
+      testIframe.style.display = 'none';
+      testIframe.src = url;
+      testIframe.onload = () => {
+        try {
+          testIframe.contentWindow?.document;
+          setIframeBlocked(false);
+        } catch (e) {
+          setIframeBlocked(true);
+          toast.error("This site blocks iframe embedding. Opening in new tab...");
+        }
+        if (testIframe.parentNode) {
+          testIframe.parentNode.removeChild(testIframe);
+        }
+      };
+      testIframe.onerror = () => {
         setIframeBlocked(true);
-        toast.error("This site blocks iframe embedding. Opening in new tab...");
-      }
-      if (testIframe.parentNode) {
-        testIframe.parentNode.removeChild(testIframe);
-      }
-    };
-    testIframe.onerror = () => {
-      setIframeBlocked(true);
-      if (testIframe.parentNode) {
-        testIframe.parentNode.removeChild(testIframe);
-      }
-    };
-    document.body.appendChild(testIframe);
+        if (testIframe.parentNode) {
+          testIframe.parentNode.removeChild(testIframe);
+        }
+      };
+      window.document.body.appendChild(testIframe);
+    } catch (error) {
+      console.error("Error checking iframe compatibility:", error);
+    }
   };
 
   const fetchChatHistory = async () => {
