@@ -1,8 +1,8 @@
 {
-  "timestamp": "2026-02-10T07:05:56.467363",
-  "total_tests": 10,
+  "timestamp": "2026-02-10T07:13:27.501352",
+  "total_tests": 11,
   "passed_tests": 7,
-  "success_rate": 70.0,
+  "success_rate": 63.63636363636363,
   "test_details": [
     {
       "test": "Document Upload (TXT)",
@@ -17,7 +17,7 @@
     {
       "test": "Get All Documents",
       "success": true,
-      "details": "Found 14 documents"
+      "details": "Found 19 documents"
     },
     {
       "test": "Get Single Document",
@@ -25,9 +25,14 @@
       "details": ""
     },
     {
-      "test": "Text-to-Speech",
+      "test": "OpenAI TTS",
       "success": false,
       "details": "Status: 429"
+    },
+    {
+      "test": "Gemini TTS",
+      "success": false,
+      "details": "Status: 520"
     },
     {
       "test": "AI Chat (OpenAI)",
