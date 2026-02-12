@@ -183,11 +183,13 @@ async function togglePlay() {
     // Play
     const speed = parseFloat(document.getElementById('speedSlider').value);
     const voice = document.getElementById('voiceSelect').value;
+    const provider = document.getElementById('ttsProvider').value;
     
     chrome.tabs.sendMessage(tab.id, { 
       action: 'start',
       speed: speed,
-      voice: voice
+      voice: voice,
+      provider: provider
     }, (response) => {
       if (chrome.runtime.lastError) {
         console.error('Error starting:', chrome.runtime.lastError);
