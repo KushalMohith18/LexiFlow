@@ -11,6 +11,59 @@ let currentVoice = 0;
 
 console.log('[LexiFlow] Content script loaded on:', window.location.href);
 
+// Listen for text selection/click to start from that point
+document.addEventListener('mouseup', (e) => {
+  if (!isActive && !isPlaying) return; // Only work when extension is active
+  
+  const selection = window.getSelection();
+  const selectedText = selection.toString().trim();
+  
+  if (selectedText.length > 10) {
+    // User selected text - find which sentence it's in
+    console.log('[LexiFlow] User selected text:', selectedText.substring(0, 50));
+    findAndStartFromSelection(selectedText);
+  } else {
+    // User clicked without selecting - find clicked element's text
+    const clickedElement = e.target;
+    if (clickedElement && clickedElement.textContent) {
+      const clickedText = clickedElement.textContent.trim();
+      if (clickedText.length > 10) {
+        console.log('[LexiFlow] User clicked element');
+        findAndStartFromSelection(clickedText);
+      }
+    }
+  }
+});
+
+// Find sentence containing selected text and start from there
+function findAndStartFromSelection(selectedText) {
+  if (sentences.length === 0) {
+    console.log('[LexiFlow] No sentences extracted yet');
+    return;
+  }
+  
+  // Find which sentence contains this text
+  const matchIndex = sentences.findIndex(sentence => 
+    sentence.includes(selectedText.substring(0, 50)) ||
+    selectedText.includes(sentence.substring(0, 50))
+  );
+  
+  if (matchIndex !== -1) {
+    console.log('[LexiFlow] Found matching sentence at index:', matchIndex);
+    currentSentenceIndex = matchIndex;
+    
+    if (isPlaying) {
+      // If already playing, jump to this sentence
+      speechSynthesis.cancel();
+      speakSentence(matchIndex, currentSpeed, currentVoice);
+    } else {
+      // Just highlight it
+      highlightSentence(sentences[matchIndex]);
+      sendStatusUpdate();
+    }
+  }
+}
+
 // Extract text content from page
 function extractContent() {
   console.log('[LexiFlow] Extracting content...');
