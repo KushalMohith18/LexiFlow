@@ -1,22 +1,30 @@
-/* LexiFlow Content Script - Enhanced with Edge TTS */
+/* LexiFlow Content Script - Enhanced with Multiple TTS Providers */
 
 let isActive = false;
 let isPlaying = false;
 let currentSentenceIndex = 0;
 let sentences = [];
 let currentSpeed = 1.0;
-let currentVoice = 'en-US-JennyNeural';
-let currentProvider = 'edge';
+let currentVoice = 'en-US-Wavenet-D';
+let currentProvider = 'puter'; // Default to Puter TTS
 let highlightedElement = null;
-let audioElement = null;
-let edgeTTS = null;
+let puterTTS = null;
+let onEndCallback = null;
 
 console.log('[LexiFlow] Content script loaded on:', window.location.href);
 
-// Initialize Edge TTS
-if (typeof EdgeTTS !== 'undefined') {
-  edgeTTS = new EdgeTTS();
-  console.log('[LexiFlow] Edge TTS initialized');
+// Initialize Puter TTS
+if (typeof PuterTTS !== 'undefined') {
+  puterTTS = new PuterTTS();
+  puterTTS.load().then(() => {
+    console.log('[LexiFlow] Puter TTS initialized');
+  }).catch(err => {
+    console.warn('[LexiFlow] Puter TTS not available, using browser TTS:', err);
+    currentProvider = 'browser';
+  });
+} else {
+  console.log('[LexiFlow] PuterTTS class not found, will use browser TTS');
+  currentProvider = 'browser';
 }
 
 // Extract text content from page
@@ -34,7 +42,8 @@ function extractContent() {
     '.documentation',
     '.docs-content',
     '.markdown-body',
-    '.post-content'
+    '.post-content',
+    '.prose'
   ];
 
   let contentElement = null;
@@ -60,7 +69,7 @@ function extractContent() {
         if (!parent) return NodeFilter.FILTER_REJECT;
         
         const tagName = parent.tagName.toLowerCase();
-        if (['script', 'style', 'noscript', 'iframe', 'svg'].includes(tagName)) {
+        if (['script', 'style', 'noscript', 'iframe', 'svg', 'nav', 'footer', 'header'].includes(tagName)) {
           return NodeFilter.FILTER_REJECT;
         }
 
@@ -83,7 +92,7 @@ function extractContent() {
     }
   }
 
-  // Better sentence splitting
+  // Better sentence splitting that handles code and abbreviations
   const rawSentences = textContent.match(/[^.!?]+[.!?]+/g) || [];
   sentences = rawSentences
     .map(s => s.trim())
@@ -165,47 +174,38 @@ function removeHighlight() {
   }
 }
 
-// Play audio using Edge TTS
-async function playWithEdgeTTS(text, voiceName, speed) {
+// Play audio using Puter TTS
+async function playWithPuterTTS(text, voiceId, speed) {
   try {
-    console.log('[LexiFlow] Using Edge TTS:', voiceName);
+    console.log('[LexiFlow] Using Puter TTS:', voiceId, 'speed:', speed);
     
-    const audioBlob = await edgeTTS.synthesize(text, voiceName, speed);
-    const audioUrl = URL.createObjectURL(audioBlob);
-    
-    // Create or reuse audio element
-    if (!audioElement) {
-      audioElement = new Audio();
+    if (!puterTTS || !(await puterTTS.isAvailable())) {
+      console.warn('[LexiFlow] Puter TTS not available, falling back to browser');
+      playWithBrowserTTS(text, speed);
+      return;
     }
     
-    audioElement.src = audioUrl;
-    audioElement.onended = handleAudioEnd;
-    audioElement.onerror = (e) => {
-      console.error('[LexiFlow] Edge TTS audio error:', e);
-      // Fallback to browser TTS
-      playWithBrowserTTS(text, speed);
-    };
-    
-    await audioElement.play();
-    console.log('[LexiFlow] Edge TTS playback started');
+    // Use puter.say for direct playback
+    await puterTTS.speak(text, voiceId, speed);
+    handleAudioEnd();
     
   } catch (error) {
-    console.error('[LexiFlow] Edge TTS failed:', error);
+    console.error('[LexiFlow] Puter TTS failed:', error);
     // Fallback to browser TTS
     playWithBrowserTTS(text, speed);
   }
 }
 
-// Play audio using Browser TTS
+// Play audio using Browser TTS (fallback)
 function playWithBrowserTTS(text, speed) {
-  console.log('[LexiFlow] Using Browser TTS');
+  console.log('[LexiFlow] Using Browser TTS, speed:', speed);
   
   speechSynthesis.cancel();
   
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = speed;
   
-  // Get voices and apply sorting
+  // Get voices and apply sorting for best quality
   const voices = speechSynthesis.getVoices();
   const sortedVoices = voices.sort((a, b) => {
     const qualityKeywords = ['enhanced', 'premium', 'natural', 'neural', 'google', 'microsoft'];
@@ -217,8 +217,19 @@ function playWithBrowserTTS(text, speed) {
     return a.name.localeCompare(b.name);
   });
   
-  if (sortedVoices[currentVoice]) {
+  // Find matching voice by name or use best available
+  if (typeof currentVoice === 'number' && sortedVoices[currentVoice]) {
     utterance.voice = sortedVoices[currentVoice];
+  } else if (typeof currentVoice === 'string') {
+    const matchingVoice = sortedVoices.find(v => 
+      v.name.toLowerCase().includes(currentVoice.toLowerCase()) ||
+      v.voiceURI.toLowerCase().includes(currentVoice.toLowerCase())
+    );
+    if (matchingVoice) {
+      utterance.voice = matchingVoice;
+    } else if (sortedVoices.length > 0) {
+      utterance.voice = sortedVoices[0];
+    }
   }
   
   utterance.onend = handleAudioEnd;
@@ -237,9 +248,10 @@ function handleAudioEnd() {
     setTimeout(() => {
       currentSentenceIndex++;
       speakSentence(currentSentenceIndex);
-    }, 500);
+    }, 400); // Small delay between sentences for natural pacing
   } else if (currentSentenceIndex >= sentences.length - 1) {
     stopReading();
+    console.log('[LexiFlow] Finished reading all content');
   }
 }
 
@@ -253,7 +265,7 @@ async function speakSentence(index) {
   currentSentenceIndex = index;
   const text = sentences[index];
   
-  console.log('[LexiFlow] Speaking sentence', index + 1, 'of', sentences.length);
+  console.log('[LexiFlow] Speaking sentence', index + 1, 'of', sentences.length, '| Provider:', currentProvider);
   
   // Highlight
   highlightSentence(text);
@@ -261,9 +273,9 @@ async function speakSentence(index) {
   // Update floating controls
   updateFloatingControls();
   
-  // Speak
-  if (currentProvider === 'edge' && edgeTTS) {
-    await playWithEdgeTTS(text, currentVoice, currentSpeed);
+  // Speak using selected provider
+  if (currentProvider === 'puter' && puterTTS) {
+    await playWithPuterTTS(text, currentVoice, currentSpeed);
   } else {
     playWithBrowserTTS(text, currentSpeed);
   }
@@ -273,11 +285,14 @@ async function speakSentence(index) {
 }
 
 function stopReading() {
+  // Stop browser TTS
   speechSynthesis.cancel();
-  if (audioElement) {
-    audioElement.pause();
-    audioElement.src = '';
+  
+  // Stop Puter TTS if active
+  if (puterTTS) {
+    puterTTS.stop();
   }
+  
   isPlaying = false;
   removeHighlight();
   updateFloatingControls();
@@ -287,8 +302,8 @@ function stopReading() {
 
 function pauseReading() {
   speechSynthesis.cancel();
-  if (audioElement) {
-    audioElement.pause();
+  if (puterTTS) {
+    puterTTS.stop();
   }
   isPlaying = false;
   updateFloatingControls();
@@ -304,7 +319,8 @@ function sendStatusUpdate() {
         isActive: isActive,
         isPlaying: isPlaying,
         currentIndex: currentSentenceIndex,
-        totalSentences: sentences.length
+        totalSentences: sentences.length,
+        provider: currentProvider
       }
     });
   } catch (error) {
@@ -312,9 +328,12 @@ function sendStatusUpdate() {
   }
 }
 
-// Improved text selection
+// Improved text selection - click to start from any sentence
 document.addEventListener('mouseup', (e) => {
   if (!isActive) return;
+  
+  // Ignore clicks on our floating controls
+  if (e.target.closest('#lexiflow-floating-controls')) return;
   
   const selection = window.getSelection();
   const selectedText = selection.toString().trim();
@@ -366,13 +385,12 @@ function findAndStartFromSelection(selectedText) {
 
 function stopCurrentPlayback() {
   speechSynthesis.cancel();
-  if (audioElement) {
-    audioElement.pause();
-    audioElement.src = '';
+  if (puterTTS) {
+    puterTTS.stop();
   }
 }
 
-// Message handler
+// Message handler from popup/background
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('[LexiFlow] Received message:', request.action);
   
@@ -381,7 +399,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       try {
         extractContent();
         if (sentences.length === 0) {
-          sendResponse({ success: false, error: 'No content found' });
+          sendResponse({ success: false, error: 'No content found on this page' });
           return true;
         }
         isActive = true;
@@ -394,8 +412,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     
     currentSpeed = request.speed || 1.0;
-    currentVoice = request.voice || 'en-US-JennyNeural';
-    currentProvider = request.provider || 'edge';
+    currentVoice = request.voice || 'en-US-Wavenet-D';
+    currentProvider = request.provider || 'puter';
     isPlaying = true;
     
     speakSentence(currentSentenceIndex);
@@ -404,6 +422,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   else if (request.action === 'pause') {
     pauseReading();
+    sendResponse({ success: true });
+  }
+  
+  else if (request.action === 'stop') {
+    stopReading();
     sendResponse({ success: true });
   }
   
@@ -435,19 +458,23 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ success: true });
   }
   
-  else if (request.action === 'updateSpeed' && request.immediate) {
+  else if (request.action === 'updateSpeed') {
     currentSpeed = request.speed;
-    if (isPlaying) {
+    console.log('[LexiFlow] Speed updated to:', currentSpeed);
+    if (request.immediate && isPlaying) {
       stopCurrentPlayback();
       speakSentence(currentSentenceIndex);
     }
     sendResponse({ success: true });
   }
   
-  else if (request.action === 'updateVoice' && request.immediate) {
+  else if (request.action === 'updateVoice') {
     currentVoice = request.voice;
-    currentProvider = request.provider || currentProvider;
-    if (isPlaying) {
+    if (request.provider) {
+      currentProvider = request.provider;
+    }
+    console.log('[LexiFlow] Voice updated to:', currentVoice, 'Provider:', currentProvider);
+    if (request.immediate && isPlaying) {
       stopCurrentPlayback();
       speakSentence(currentSentenceIndex);
     }
@@ -456,6 +483,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   
   else if (request.action === 'changeProvider') {
     currentProvider = request.provider;
+    console.log('[LexiFlow] Provider changed to:', currentProvider);
     if (isPlaying) {
       stopCurrentPlayback();
       speakSentence(currentSentenceIndex);
@@ -468,8 +496,46 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       isActive: isActive,
       isPlaying: isPlaying,
       currentIndex: currentSentenceIndex,
-      totalSentences: sentences.length
+      totalSentences: sentences.length,
+      provider: currentProvider,
+      voice: currentVoice,
+      speed: currentSpeed
     });
+  }
+  
+  else if (request.action === 'getVoices') {
+    const voices = [];
+    
+    // Add Puter TTS voices
+    if (puterTTS) {
+      const puterVoices = puterTTS.getVoices();
+      puterVoices.forEach(v => {
+        voices.push({
+          id: v.id,
+          name: v.name,
+          provider: 'puter',
+          locale: v.locale,
+          gender: v.gender,
+          quality: v.id.includes('Wavenet') ? 'high' : 'standard'
+        });
+      });
+    }
+    
+    // Add browser voices
+    const browserVoices = speechSynthesis.getVoices();
+    browserVoices
+      .filter(v => v.lang.startsWith('en'))
+      .forEach((v, i) => {
+        voices.push({
+          id: `browser-${i}`,
+          name: v.name,
+          provider: 'browser',
+          locale: v.lang,
+          quality: v.name.toLowerCase().includes('enhanced') ? 'high' : 'standard'
+        });
+      });
+    
+    sendResponse({ voices });
   }
   
   return true;
@@ -480,19 +546,41 @@ function createFloatingControls() {
   const container = document.createElement('div');
   container.id = 'lexiflow-floating-controls';
   container.innerHTML = `
-    <div class="lexiflow-logo">
-      <svg width="32" height="32" viewBox="0 0 32 32">
-        <circle cx="16" cy="16" r="14" fill="#6D28D9"/>
-        <path d="M 10 16 L 14 20 L 22 12" stroke="#00F0FF" stroke-width="2" fill="none"/>
+    <div class="lexiflow-logo" title="LexiFlow">
+      <svg width="28" height="28" viewBox="0 0 32 32">
+        <defs>
+          <linearGradient id="lexiflow-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#6D28D9"/>
+            <stop offset="100%" style="stop-color:#00F0FF"/>
+          </linearGradient>
+        </defs>
+        <circle cx="16" cy="16" r="14" fill="url(#lexiflow-grad)"/>
+        <path d="M 11 16 L 14 19 L 21 12" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
     </div>
     <div class="lexiflow-controls-panel">
       <div class="lexiflow-progress" id="lexiflow-progress-text">0 / 0</div>
       <div class="lexiflow-buttons">
-        <button id="lexiflow-prev" title="Previous">⏮</button>
-        <button id="lexiflow-play" title="Play/Pause">▶</button>
-        <button id="lexiflow-next" title="Next">⏭</button>
-        <button id="lexiflow-close" title="Close">✕</button>
+        <button id="lexiflow-prev" title="Previous sentence">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z"/>
+          </svg>
+        </button>
+        <button id="lexiflow-play" title="Play/Pause">
+          <svg id="lexiflow-play-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+        </button>
+        <button id="lexiflow-next" title="Next sentence">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 18l8.5-6L6 6v12zm8.5 0h2V6h-2v12z"/>
+          </svg>
+        </button>
+        <button id="lexiflow-close" title="Close LexiFlow">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
       </div>
     </div>
   `;
@@ -500,17 +588,21 @@ function createFloatingControls() {
   document.body.appendChild(container);
   
   // Event listeners
-  container.querySelector('#lexiflow-prev').addEventListener('click', () => {
-    chrome.runtime.sendMessage({ action: 'navigate', direction: 'prev' });
+  container.querySelector('#lexiflow-prev').addEventListener('click', (e) => {
+    e.stopPropagation();
     if (currentSentenceIndex > 0) {
       stopCurrentPlayback();
       currentSentenceIndex--;
       if (isPlaying) speakSentence(currentSentenceIndex);
-      else highlightSentence(sentences[currentSentenceIndex]);
+      else {
+        highlightSentence(sentences[currentSentenceIndex]);
+        updateFloatingControls();
+      }
     }
   });
   
-  container.querySelector('#lexiflow-play').addEventListener('click', () => {
+  container.querySelector('#lexiflow-play').addEventListener('click', (e) => {
+    e.stopPropagation();
     if (isPlaying) {
       pauseReading();
     } else {
@@ -520,16 +612,21 @@ function createFloatingControls() {
     updateFloatingControls();
   });
   
-  container.querySelector('#lexiflow-next').addEventListener('click', () => {
+  container.querySelector('#lexiflow-next').addEventListener('click', (e) => {
+    e.stopPropagation();
     if (currentSentenceIndex < sentences.length - 1) {
       stopCurrentPlayback();
       currentSentenceIndex++;
       if (isPlaying) speakSentence(currentSentenceIndex);
-      else highlightSentence(sentences[currentSentenceIndex]);
+      else {
+        highlightSentence(sentences[currentSentenceIndex]);
+        updateFloatingControls();
+      }
     }
   });
   
-  container.querySelector('#lexiflow-close').addEventListener('click', () => {
+  container.querySelector('#lexiflow-close').addEventListener('click', (e) => {
+    e.stopPropagation();
     hideFloatingControls();
     stopReading();
     isActive = false;
@@ -558,15 +655,21 @@ function updateFloatingControls() {
   if (!controls) return;
   
   const progressText = controls.querySelector('#lexiflow-progress-text');
+  const playIcon = controls.querySelector('#lexiflow-play-icon');
   const playBtn = controls.querySelector('#lexiflow-play');
   
   if (progressText) {
     progressText.textContent = `${currentSentenceIndex + 1} / ${sentences.length}`;
   }
   
-  if (playBtn) {
-    playBtn.textContent = isPlaying ? '⏸' : '▶';
-    playBtn.title = isPlaying ? 'Pause' : 'Play';
+  if (playIcon && playBtn) {
+    if (isPlaying) {
+      playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+      playBtn.title = 'Pause';
+    } else {
+      playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+      playBtn.title = 'Play';
+    }
   }
 }
 
@@ -584,22 +687,28 @@ style.textContent = `
     }
   }
   
+  @keyframes lexiflow-glow {
+    0%, 100% { box-shadow: 0 0 20px rgba(109, 40, 217, 0.4); }
+    50% { box-shadow: 0 0 30px rgba(109, 40, 217, 0.6), 0 0 40px rgba(0, 240, 255, 0.3); }
+  }
+  
   #lexiflow-highlight {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
   
   #lexiflow-floating-controls {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 999999;
+    bottom: 24px;
+    right: 24px;
+    z-index: 2147483647;
     display: flex;
     align-items: center;
     gap: 12px;
     opacity: 0;
     transform: translateY(100px);
-    transition: all 0.3s ease-in-out;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     pointer-events: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
   
   #lexiflow-floating-controls.visible {
@@ -611,61 +720,64 @@ style.textContent = `
   .lexiflow-logo {
     width: 48px;
     height: 48px;
-    background: linear-gradient(135deg, #6D28D9, #00F0FF);
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 20px rgba(109, 40, 217, 0.4);
+    box-shadow: 0 4px 20px rgba(109, 40, 217, 0.4), 0 0 0 1px rgba(109, 40, 217, 0.3);
     cursor: pointer;
-    transition: transform 0.2s;
+    transition: all 0.2s ease;
+    animation: lexiflow-glow 3s ease-in-out infinite;
   }
   
   .lexiflow-logo:hover {
     transform: scale(1.1);
+    box-shadow: 0 6px 30px rgba(109, 40, 217, 0.6);
   }
   
   .lexiflow-controls-panel {
-    background: rgba(10, 10, 10, 0.95);
+    background: rgba(10, 10, 20, 0.95);
     backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid rgba(109, 40, 217, 0.3);
     border-radius: 16px;
     padding: 12px 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
   
   .lexiflow-progress {
-    font-size: 12px;
-    color: #aaa;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.6);
     text-align: center;
     margin-bottom: 8px;
-    font-family: system-ui, -apple-system, sans-serif;
+    font-weight: 500;
+    letter-spacing: 0.5px;
   }
   
   .lexiflow-buttons {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: center;
   }
   
   .lexiflow-buttons button {
-    background: #1a1a1a;
-    border: 1px solid #333;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     color: #fff;
     width: 32px;
     height: 32px;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    transition: all 0.15s ease;
   }
   
   .lexiflow-buttons button:hover {
-    background: #6D28D9;
-    border-color: #6D28D9;
+    background: rgba(109, 40, 217, 0.3);
+    border-color: rgba(109, 40, 217, 0.5);
     transform: scale(1.05);
   }
   
@@ -674,30 +786,37 @@ style.textContent = `
   }
   
   #lexiflow-play {
-    background: #6D28D9;
-    border-color: #6D28D9;
+    background: linear-gradient(135deg, #6D28D9, #7C3AED);
+    border-color: transparent;
     width: 40px;
     height: 40px;
-    font-size: 16px;
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(109, 40, 217, 0.4);
+  }
+  
+  #lexiflow-play:hover {
+    background: linear-gradient(135deg, #7C3AED, #8B5CF6);
+    transform: scale(1.08);
+    box-shadow: 0 4px 15px rgba(109, 40, 217, 0.5);
   }
   
   #lexiflow-close {
-    background: #333;
+    background: rgba(255, 255, 255, 0.05);
   }
   
   #lexiflow-close:hover {
-    background: #d32f2f;
-    border-color: #d32f2f;
+    background: rgba(220, 38, 38, 0.4);
+    border-color: rgba(220, 38, 38, 0.6);
   }
 `;
 document.head.appendChild(style);
 
-console.log('[LexiFlow] Extension ready with floating controls');
-console.log('[LexiFlow] 💡 Tip: Click any text to start reading from there');
+console.log('[LexiFlow] Extension ready');
+console.log('[LexiFlow] 💡 Tip: Click any sentence to start reading from there');
 
-// Notify background
+// Notify background script that content script is loaded
 chrome.runtime.sendMessage({ action: 'contentScriptLoaded', url: window.location.href }, () => {
   if (chrome.runtime.lastError) {
-    // Ignore
+    // Ignore - background may not be ready
   }
 });
