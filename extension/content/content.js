@@ -1,336 +1,442 @@
-/* LexiFlow Content Script - Enhanced TTS with Real-time Controls */
+/* LexiFlow Content Script - Multi-Provider TTS with Audiobook Narration */
 
-let isActive = false;
-let isPlaying = false;
-let currentSentenceIndex = 0;
-let sentences = [];
-let currentSpeed = 1.0;
-let currentVoice = 'Joanna';
-let currentProvider = 'puter';
-let highlightedElement = null;
+// State management
+const state = {
+  isActive: false,
+  isPlaying: false,
+  isPaused: false,
+  currentSentenceIndex: 0,
+  sentences: [],
+  speed: 1.0,
+  voice: 'Joanna',
+  provider: 'puter',
+  pendingVoiceChange: null,
+  highlightElement: null
+};
+
+// TTS Providers
 let puterTTS = null;
-let pendingVoiceChange = null; // For applying voice change after current sentence
+let sarvamTTS = null;
+let currentAudio = null; // Track current audio element globally
 
-console.log('[LexiFlow] Content script loaded on:', window.location.href);
+// Sarvam API Key
+const SARVAM_API_KEY = 'sk_jskshbhw_yh51ve4TLQEvERGAqRGw1XHE';
 
-// Initialize Puter TTS
-if (typeof PuterTTS !== 'undefined') {
-  puterTTS = new PuterTTS();
-  puterTTS.load().then(() => {
-    console.log('[LexiFlow] Puter TTS initialized');
-  }).catch(err => {
-    console.warn('[LexiFlow] Puter TTS not available, using browser TTS:', err);
-    currentProvider = 'browser';
-  });
-} else {
-  console.log('[LexiFlow] PuterTTS class not found, will use browser TTS');
-  currentProvider = 'browser';
+console.log('[LexiFlow] Content script loaded');
+
+// Initialize TTS providers
+function initProviders() {
+  if (typeof PuterTTS !== 'undefined') {
+    puterTTS = new PuterTTS();
+    puterTTS.load().then(() => {
+      console.log('[LexiFlow] Puter TTS ready');
+    }).catch(err => {
+      console.warn('[LexiFlow] Puter TTS failed:', err);
+    });
+  }
+  
+  if (typeof SarvamTTS !== 'undefined') {
+    sarvamTTS = new SarvamTTS(SARVAM_API_KEY);
+    console.log('[LexiFlow] Sarvam TTS ready');
+  }
 }
 
-// Extract text content from page
+// Initialize on load
+initProviders();
+
+// Extract page content
 function extractContent() {
   console.log('[LexiFlow] Extracting content...');
   
-  const mainSelectors = [
-    'main',
-    'article', 
-    '[role="main"]',
-    '.content',
-    '.main-content',
-    '#content',
-    '.article-content',
-    '.documentation',
-    '.docs-content',
-    '.markdown-body',
-    '.post-content',
-    '.prose'
+  const selectors = [
+    'main', 'article', '[role="main"]', '.content', '.main-content',
+    '#content', '.documentation', '.docs-content', '.markdown-body', '.prose'
   ];
 
-  let contentElement = null;
-  for (const selector of mainSelectors) {
-    contentElement = document.querySelector(selector);
-    if (contentElement) {
-      console.log('[LexiFlow] Found content in:', selector);
-      break;
-    }
+  let contentEl = null;
+  for (const sel of selectors) {
+    contentEl = document.querySelector(sel);
+    if (contentEl) break;
   }
+  contentEl = contentEl || document.body;
 
-  if (!contentElement) {
-    console.log('[LexiFlow] Using body as fallback');
-    contentElement = document.body;
-  }
-
-  const walker = document.createTreeWalker(
-    contentElement,
-    NodeFilter.SHOW_TEXT,
-    {
-      acceptNode: (node) => {
-        const parent = node.parentElement;
-        if (!parent) return NodeFilter.FILTER_REJECT;
-        
-        const tagName = parent.tagName.toLowerCase();
-        if (['script', 'style', 'noscript', 'iframe', 'svg', 'nav', 'footer', 'header'].includes(tagName)) {
-          return NodeFilter.FILTER_REJECT;
-        }
-
-        const style = window.getComputedStyle(parent);
-        if (style.display === 'none' || style.visibility === 'hidden') {
-          return NodeFilter.FILTER_REJECT;
-        }
-
-        return NodeFilter.FILTER_ACCEPT;
+  const walker = document.createTreeWalker(contentEl, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => {
+      const parent = node.parentElement;
+      if (!parent) return NodeFilter.FILTER_REJECT;
+      const tag = parent.tagName.toLowerCase();
+      if (['script', 'style', 'noscript', 'iframe', 'svg', 'nav', 'footer'].includes(tag)) {
+        return NodeFilter.FILTER_REJECT;
       }
+      const style = window.getComputedStyle(parent);
+      if (style.display === 'none' || style.visibility === 'hidden') {
+        return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
     }
-  );
+  });
 
-  let textContent = '';
+  let text = '';
   let node;
   while (node = walker.nextNode()) {
-    const text = node.textContent.trim();
-    if (text.length > 0) {
-      textContent += text + ' ';
-    }
+    const t = node.textContent.trim();
+    if (t.length > 0) text += t + ' ';
   }
 
-  // Better sentence splitting
-  const rawSentences = textContent.match(/[^.!?]+[.!?]+/g) || [];
-  sentences = rawSentences
-    .map(s => s.trim())
-    .filter(s => s.length > 10 && s.split(' ').length > 2);
-
-  console.log('[LexiFlow] Extracted', sentences.length, 'sentences');
-  return sentences;
+  const raw = text.match(/[^.!?]+[.!?]+/g) || [];
+  state.sentences = raw.map(s => s.trim()).filter(s => s.length > 10 && s.split(' ').length > 2);
+  
+  console.log('[LexiFlow] Found', state.sentences.length, 'sentences');
+  return state.sentences;
 }
 
-// Highlight sentence
-function highlightSentence(sentenceText) {
+// Highlight current sentence
+function highlight(text) {
   removeHighlight();
-  if (!sentenceText) return;
+  if (!text) return;
 
-  const walker = document.createTreeWalker(
-    document.body,
-    NodeFilter.SHOW_TEXT,
-    null
-  );
-
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
   let node;
-  let found = false;
+  
   while (node = walker.nextNode()) {
-    const text = node.textContent;
-    const searchText = sentenceText.substring(0, 50).trim();
+    const content = node.textContent;
+    const search = text.substring(0, 50).trim();
     
-    if (text.includes(searchText) || text.replace(/\s+/g, ' ').includes(searchText)) {
+    if (content.includes(search) || content.replace(/\s+/g, ' ').includes(search)) {
       const parent = node.parentElement;
       if (!parent) continue;
-
+      
       const rect = parent.getBoundingClientRect();
       if (rect.height === 0) continue;
 
-      const highlight = document.createElement('div');
-      highlight.id = 'lexiflow-highlight';
-      highlight.style.cssText = `
+      const el = document.createElement('div');
+      el.id = 'lexiflow-highlight';
+      el.style.cssText = `
         position: absolute;
         left: ${rect.left + window.scrollX}px;
         top: ${rect.top + window.scrollY}px;
         width: ${rect.width}px;
         min-height: ${rect.height}px;
-        background: linear-gradient(90deg, rgba(109, 40, 217, 0.25) 0%, rgba(0, 240, 255, 0.15) 100%);
-        border-left: 5px solid #6D28D9;
-        padding-left: 12px;
+        background: linear-gradient(90deg, rgba(109, 40, 217, 0.3) 0%, rgba(0, 240, 255, 0.15) 100%);
+        border-left: 4px solid #6D28D9;
         pointer-events: none;
         z-index: 999998;
-        animation: lexiflow-pulse 0.4s ease-in-out;
-        box-shadow: 0 0 30px rgba(109, 40, 217, 0.4), inset 0 0 20px rgba(0, 240, 255, 0.1);
         border-radius: 4px;
+        transition: all 0.2s ease;
       `;
+      document.body.appendChild(el);
+      state.highlightElement = el;
 
-      document.body.appendChild(highlight);
-      highlightedElement = highlight;
-
-      // Scroll to eye level (1/3 from top)
-      const viewportHeight = window.innerHeight;
-      const targetPosition = rect.top + window.scrollY - (viewportHeight / 3);
-      
-      window.scrollTo({
-        top: Math.max(0, targetPosition),
-        behavior: 'smooth'
-      });
-      
-      found = true;
+      // Scroll to eye level
+      const targetY = rect.top + window.scrollY - (window.innerHeight / 3);
+      window.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' });
       break;
     }
-  }
-  
-  if (!found) {
-    console.log('[LexiFlow] Could not find sentence in DOM');
   }
 }
 
 function removeHighlight() {
-  if (highlightedElement) {
-    highlightedElement.remove();
-    highlightedElement = null;
+  if (state.highlightElement) {
+    state.highlightElement.remove();
+    state.highlightElement = null;
   }
 }
 
-// Play audio using Puter TTS
-async function playWithPuterTTS(text, voiceId, speed) {
+// Stop all audio playback
+function stopAllAudio() {
+  // Stop Puter TTS
+  if (puterTTS) {
+    puterTTS.stop();
+  }
+  
+  // Stop Sarvam TTS
+  if (sarvamTTS) {
+    sarvamTTS.stop();
+  }
+  
+  // Stop browser TTS
+  speechSynthesis.cancel();
+  
+  // Stop any tracked audio
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.src = '';
+    currentAudio = null;
+  }
+}
+
+// Pause audio
+function pauseAudio() {
+  state.isPaused = true;
+  state.isPlaying = false;
+  
+  if (state.provider === 'puter' && puterTTS && puterTTS.currentAudio) {
+    puterTTS.currentAudio.pause();
+  } else if (state.provider === 'sarvam' && sarvamTTS && sarvamTTS.currentAudio) {
+    sarvamTTS.currentAudio.pause();
+  } else if (state.provider === 'browser') {
+    speechSynthesis.pause();
+  }
+  
+  if (currentAudio) {
+    currentAudio.pause();
+  }
+  
+  updateUI();
+  console.log('[LexiFlow] Paused');
+}
+
+// Resume audio
+function resumeAudio() {
+  state.isPaused = false;
+  state.isPlaying = true;
+  
+  let resumed = false;
+  
+  if (state.provider === 'puter' && puterTTS && puterTTS.currentAudio && puterTTS.currentAudio.paused) {
+    puterTTS.currentAudio.play();
+    resumed = true;
+  } else if (state.provider === 'sarvam' && sarvamTTS && sarvamTTS.currentAudio && sarvamTTS.currentAudio.paused) {
+    sarvamTTS.currentAudio.play();
+    resumed = true;
+  } else if (state.provider === 'browser' && speechSynthesis.paused) {
+    speechSynthesis.resume();
+    resumed = true;
+  }
+  
+  if (currentAudio && currentAudio.paused) {
+    currentAudio.play();
+    resumed = true;
+  }
+  
+  // If nothing to resume, start speaking current sentence
+  if (!resumed) {
+    speakSentence(state.currentSentenceIndex);
+  }
+  
+  updateUI();
+  console.log('[LexiFlow] Resumed');
+}
+
+// Update playback speed in real-time
+function updateSpeed(newSpeed) {
+  state.speed = newSpeed;
+  
+  // Apply to current audio immediately
+  if (puterTTS && puterTTS.currentAudio) {
+    puterTTS.currentAudio.playbackRate = newSpeed;
+  }
+  if (sarvamTTS && sarvamTTS.currentAudio) {
+    sarvamTTS.currentAudio.playbackRate = newSpeed;
+  }
+  if (currentAudio) {
+    currentAudio.playbackRate = newSpeed;
+  }
+  // Browser TTS rate is set per utterance, can't change mid-speech
+  
+  console.log('[LexiFlow] Speed updated to:', newSpeed);
+}
+
+// Queue voice change for next sentence
+function updateVoice(newVoice, newProvider) {
+  if (state.isPlaying && !state.isPaused) {
+    // Queue for next sentence
+    state.pendingVoiceChange = { voice: newVoice, provider: newProvider || state.provider };
+    console.log('[LexiFlow] Voice change queued:', newVoice);
+  } else {
+    // Apply immediately
+    state.voice = newVoice;
+    if (newProvider) state.provider = newProvider;
+    console.log('[LexiFlow] Voice changed to:', newVoice);
+  }
+}
+
+// Apply pending voice change
+function applyPendingChanges() {
+  if (state.pendingVoiceChange) {
+    state.voice = state.pendingVoiceChange.voice;
+    state.provider = state.pendingVoiceChange.provider;
+    state.pendingVoiceChange = null;
+    console.log('[LexiFlow] Applied pending voice:', state.voice);
+  }
+}
+
+// Handle sentence completion
+function onSentenceEnd() {
+  console.log('[LexiFlow] Sentence', state.currentSentenceIndex + 1, 'completed');
+  
+  // Apply any pending voice changes
+  applyPendingChanges();
+  
+  if (state.isPlaying && state.currentSentenceIndex < state.sentences.length - 1) {
+    // Short pause between sentences for natural audiobook feel
+    setTimeout(() => {
+      state.currentSentenceIndex++;
+      speakSentence(state.currentSentenceIndex);
+    }, 350);
+  } else if (state.currentSentenceIndex >= state.sentences.length - 1) {
+    // Finished all sentences
+    state.isPlaying = false;
+    state.isPaused = false;
+    removeHighlight();
+    updateUI();
+    console.log('[LexiFlow] Finished reading');
+  }
+}
+
+// Speak using Puter TTS
+async function speakWithPuter(text) {
   try {
-    console.log('[LexiFlow] Using Puter TTS:', voiceId, 'speed:', speed);
-    
     if (!puterTTS || !(await puterTTS.isAvailable())) {
-      console.warn('[LexiFlow] Puter TTS not available, falling back to browser');
-      playWithBrowserTTS(text, speed);
-      return;
+      throw new Error('Puter TTS not available');
     }
     
-    await puterTTS.speak(text, voiceId, speed, handleAudioEnd);
+    await puterTTS.speak(text, state.voice, state.speed, onSentenceEnd);
+    currentAudio = puterTTS.currentAudio;
     
   } catch (error) {
-    console.error('[LexiFlow] Puter TTS failed:', error);
-    // Fallback to browser TTS
-    playWithBrowserTTS(text, speed);
+    console.error('[LexiFlow] Puter TTS error:', error);
+    // Fallback to browser
+    speakWithBrowser(text);
   }
 }
 
-// Play audio using Browser TTS (fallback)
-function playWithBrowserTTS(text, speed) {
-  console.log('[LexiFlow] Using Browser TTS, speed:', speed);
-  
+// Speak using Sarvam TTS
+async function speakWithSarvam(text) {
+  try {
+    if (!sarvamTTS || !(await sarvamTTS.isAvailable())) {
+      throw new Error('Sarvam TTS not available');
+    }
+    
+    await sarvamTTS.speak(text, state.voice, state.speed, onSentenceEnd);
+    currentAudio = sarvamTTS.currentAudio;
+    
+  } catch (error) {
+    console.error('[LexiFlow] Sarvam TTS error:', error);
+    // Fallback to browser
+    speakWithBrowser(text);
+  }
+}
+
+// Speak using Browser TTS
+function speakWithBrowser(text) {
   speechSynthesis.cancel();
   
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = speed;
+  utterance.rate = state.speed;
   
-  // Get voices and apply sorting for best quality
+  // Get best voice
   const voices = speechSynthesis.getVoices();
-  const sortedVoices = voices.sort((a, b) => {
-    const qualityKeywords = ['enhanced', 'premium', 'natural', 'neural', 'google', 'microsoft'];
-    const aScore = qualityKeywords.some(k => a.name.toLowerCase().includes(k)) ? 1 : 0;
-    const bScore = qualityKeywords.some(k => b.name.toLowerCase().includes(k)) ? 1 : 0;
+  const sorted = voices.sort((a, b) => {
+    const keywords = ['enhanced', 'premium', 'natural', 'neural', 'google', 'microsoft'];
+    const aScore = keywords.some(k => a.name.toLowerCase().includes(k)) ? 1 : 0;
+    const bScore = keywords.some(k => b.name.toLowerCase().includes(k)) ? 1 : 0;
     if (aScore !== bScore) return bScore - aScore;
     if (a.lang.startsWith('en') && !b.lang.startsWith('en')) return -1;
     if (!a.lang.startsWith('en') && b.lang.startsWith('en')) return 1;
-    return a.name.localeCompare(b.name);
+    return 0;
   });
   
-  // Find matching voice
-  if (typeof currentVoice === 'string' && currentVoice.startsWith('browser-')) {
-    const voiceIndex = parseInt(currentVoice.replace('browser-', ''), 10);
-    if (sortedVoices[voiceIndex]) {
-      utterance.voice = sortedVoices[voiceIndex];
-    }
-  } else if (sortedVoices.length > 0) {
-    // Use best available English voice
-    const englishVoice = sortedVoices.find(v => v.lang.startsWith('en'));
-    utterance.voice = englishVoice || sortedVoices[0];
+  if (state.voice && state.voice.startsWith('browser-')) {
+    const idx = parseInt(state.voice.replace('browser-', ''), 10);
+    if (sorted[idx]) utterance.voice = sorted[idx];
+  } else if (sorted.length > 0) {
+    utterance.voice = sorted.find(v => v.lang.startsWith('en')) || sorted[0];
   }
   
-  utterance.onend = handleAudioEnd;
+  utterance.onend = onSentenceEnd;
   utterance.onerror = (e) => {
     console.error('[LexiFlow] Browser TTS error:', e);
+    onSentenceEnd();
   };
   
   speechSynthesis.speak(utterance);
 }
 
-// Handle audio end
-function handleAudioEnd() {
-  console.log('[LexiFlow] Finished speaking sentence', currentSentenceIndex + 1);
-  
-  // Apply pending voice change if any
-  if (pendingVoiceChange) {
-    currentVoice = pendingVoiceChange.voice;
-    if (pendingVoiceChange.provider) {
-      currentProvider = pendingVoiceChange.provider;
-    }
-    pendingVoiceChange = null;
-    console.log('[LexiFlow] Applied pending voice change:', currentVoice);
-  }
-  
-  if (isPlaying && currentSentenceIndex < sentences.length - 1) {
-    setTimeout(() => {
-      currentSentenceIndex++;
-      speakSentence(currentSentenceIndex);
-    }, 300);
-  } else if (currentSentenceIndex >= sentences.length - 1) {
-    stopReading();
-    console.log('[LexiFlow] Finished reading all content');
-  }
-}
-
 // Main speak function
 async function speakSentence(index) {
-  if (index >= sentences.length || index < 0) {
-    console.log('[LexiFlow] Invalid sentence index:', index);
+  if (index < 0 || index >= state.sentences.length) {
+    console.log('[LexiFlow] Invalid index:', index);
     return;
   }
 
-  currentSentenceIndex = index;
-  const text = sentences[index];
+  state.currentSentenceIndex = index;
+  state.isPaused = false;
+  const text = state.sentences[index];
   
-  console.log('[LexiFlow] Speaking sentence', index + 1, 'of', sentences.length, '| Provider:', currentProvider, '| Voice:', currentVoice);
+  console.log('[LexiFlow] Speaking', index + 1, '/', state.sentences.length, '| Provider:', state.provider, '| Voice:', state.voice);
   
-  // Highlight
-  highlightSentence(text);
+  highlight(text);
+  updateUI();
   
-  // Update floating controls
-  updateFloatingControls();
-  
-  // Speak using selected provider
-  if (currentProvider === 'puter' && puterTTS) {
-    await playWithPuterTTS(text, currentVoice, currentSpeed);
+  // Route to appropriate TTS provider
+  if (state.provider === 'sarvam' && sarvamTTS) {
+    await speakWithSarvam(text);
+  } else if (state.provider === 'puter' && puterTTS) {
+    await speakWithPuter(text);
   } else {
-    playWithBrowserTTS(text, currentSpeed);
+    speakWithBrowser(text);
   }
-  
-  // Update popup
-  sendStatusUpdate();
 }
 
+// Start reading
+function startReading(options = {}) {
+  if (state.sentences.length === 0) {
+    extractContent();
+    if (state.sentences.length === 0) {
+      return { success: false, error: 'No content found' };
+    }
+  }
+  
+  state.isActive = true;
+  state.isPlaying = true;
+  state.isPaused = false;
+  state.speed = options.speed || state.speed;
+  state.voice = options.voice || state.voice;
+  state.provider = options.provider || state.provider;
+  
+  if (!state.isActive) {
+    state.currentSentenceIndex = 0;
+  }
+  
+  showFloatingControls();
+  speakSentence(state.currentSentenceIndex);
+  
+  return { success: true, sentences: state.sentences.length };
+}
+
+// Stop reading
 function stopReading() {
-  // Stop browser TTS
-  speechSynthesis.cancel();
-  
-  // Stop Puter TTS if active
-  if (puterTTS) {
-    puterTTS.stop();
-  }
-  
-  isPlaying = false;
+  stopAllAudio();
+  state.isPlaying = false;
+  state.isPaused = false;
   removeHighlight();
-  updateFloatingControls();
-  sendStatusUpdate();
-  console.log('[LexiFlow] Reading stopped');
+  updateUI();
 }
 
-function pauseReading() {
-  if (currentProvider === 'puter' && puterTTS) {
-    puterTTS.pause();
-  } else {
-    speechSynthesis.pause();
+// Navigate sentences
+function navigate(direction) {
+  stopAllAudio();
+  
+  if (direction === 'prev' && state.currentSentenceIndex > 0) {
+    state.currentSentenceIndex--;
+  } else if (direction === 'next' && state.currentSentenceIndex < state.sentences.length - 1) {
+    state.currentSentenceIndex++;
   }
-  isPlaying = false;
-  updateFloatingControls();
-  sendStatusUpdate();
-  console.log('[LexiFlow] Reading paused');
+  
+  highlight(state.sentences[state.currentSentenceIndex]);
+  
+  if (state.isPlaying) {
+    speakSentence(state.currentSentenceIndex);
+  }
+  
+  updateUI();
 }
 
-function resumeReading() {
-  if (currentProvider === 'puter' && puterTTS && puterTTS.currentAudio) {
-    puterTTS.resume();
-    isPlaying = true;
-  } else if (speechSynthesis.paused) {
-    speechSynthesis.resume();
-    isPlaying = true;
-  } else {
-    // If no paused audio, start fresh
-    isPlaying = true;
-    speakSentence(currentSentenceIndex);
-  }
+// Update UI elements
+function updateUI() {
   updateFloatingControls();
   sendStatusUpdate();
-  console.log('[LexiFlow] Reading resumed');
 }
 
 function sendStatusUpdate() {
@@ -338,513 +444,319 @@ function sendStatusUpdate() {
     chrome.runtime.sendMessage({
       action: 'statusUpdate',
       status: {
-        isActive: isActive,
-        isPlaying: isPlaying,
-        currentIndex: currentSentenceIndex,
-        totalSentences: sentences.length,
-        provider: currentProvider,
-        voice: currentVoice,
-        speed: currentSpeed
+        isActive: state.isActive,
+        isPlaying: state.isPlaying,
+        isPaused: state.isPaused,
+        currentIndex: state.currentSentenceIndex,
+        totalSentences: state.sentences.length,
+        provider: state.provider,
+        voice: state.voice,
+        speed: state.speed
       }
     });
-  } catch (error) {
-    // Ignore if popup is closed
-  }
+  } catch (e) {}
 }
 
 // Click to start from selection
 document.addEventListener('mouseup', (e) => {
-  if (!isActive) return;
+  if (!state.isActive) return;
   if (e.target.closest('#lexiflow-floating-controls')) return;
   
-  const selection = window.getSelection();
-  const selectedText = selection.toString().trim();
+  const selection = window.getSelection().toString().trim();
+  const clickText = selection.length > 5 ? selection : (e.target.textContent || '').trim();
   
-  if (selectedText.length > 5) {
-    findAndStartFromSelection(selectedText);
-  } else {
-    const clickedElement = e.target;
-    if (clickedElement && clickedElement.textContent) {
-      const clickedText = clickedElement.textContent.trim();
-      if (clickedText.length > 20) {
-        findAndStartFromSelection(clickedText);
-      }
+  if (clickText.length < 10) return;
+  
+  const searchLengths = [80, 50, 30, 20];
+  let matchIdx = -1;
+  
+  for (const len of searchLengths) {
+    const search = clickText.substring(0, len).toLowerCase();
+    matchIdx = state.sentences.findIndex(s => 
+      s.toLowerCase().includes(search) || search.includes(s.substring(0, len).toLowerCase())
+    );
+    if (matchIdx !== -1) break;
+  }
+  
+  if (matchIdx !== -1) {
+    stopAllAudio();
+    state.currentSentenceIndex = matchIdx;
+    
+    if (state.isPlaying) {
+      speakSentence(matchIdx);
+    } else {
+      highlight(state.sentences[matchIdx]);
+      updateUI();
     }
   }
 });
 
-function findAndStartFromSelection(selectedText) {
-  if (sentences.length === 0) return;
-  
-  const searchLengths = [100, 50, 30, 20];
-  let matchIndex = -1;
-  
-  for (const len of searchLengths) {
-    const searchText = selectedText.substring(0, len).trim().toLowerCase();
-    matchIndex = sentences.findIndex(sentence => 
-      sentence.toLowerCase().includes(searchText) ||
-      searchText.includes(sentence.substring(0, len).trim().toLowerCase())
-    );
-    if (matchIndex !== -1) break;
-  }
-  
-  if (matchIndex !== -1) {
-    console.log('[LexiFlow] Found matching sentence at index:', matchIndex);
-    currentSentenceIndex = matchIndex;
-    
-    if (isPlaying) {
-      stopCurrentPlayback();
-      speakSentence(matchIndex);
-    } else {
-      highlightSentence(sentences[matchIndex]);
-      updateFloatingControls();
-      sendStatusUpdate();
-    }
-  }
-}
-
-function stopCurrentPlayback() {
-  speechSynthesis.cancel();
-  if (puterTTS) {
-    puterTTS.stop();
-  }
-}
-
-// Message handler from popup/background
+// Message handler
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('[LexiFlow] Received message:', request.action);
+  console.log('[LexiFlow] Message:', request.action);
   
-  if (request.action === 'start') {
-    if (!isActive || sentences.length === 0) {
-      try {
-        extractContent();
-        if (sentences.length === 0) {
-          sendResponse({ success: false, error: 'No content found on this page' });
-          return true;
-        }
-        isActive = true;
-        currentSentenceIndex = 0;
-        showFloatingControls();
-      } catch (error) {
-        sendResponse({ success: false, error: error.message });
-        return true;
-      }
-    }
-    
-    currentSpeed = request.speed || 1.0;
-    currentVoice = request.voice || 'Joanna';
-    currentProvider = request.provider || 'puter';
-    isPlaying = true;
-    
-    speakSentence(currentSentenceIndex);
-    sendResponse({ success: true, sentences: sentences.length });
-  }
-  
-  else if (request.action === 'pause') {
-    pauseReading();
-    sendResponse({ success: true });
-  }
-  
-  else if (request.action === 'resume') {
-    resumeReading();
-    sendResponse({ success: true });
-  }
-  
-  else if (request.action === 'stop') {
-    stopReading();
-    sendResponse({ success: true });
-  }
-  
-  else if (request.action === 'next') {
-    if (currentSentenceIndex < sentences.length - 1) {
-      stopCurrentPlayback();
-      currentSentenceIndex++;
-      if (isPlaying) {
-        speakSentence(currentSentenceIndex);
-      } else {
-        highlightSentence(sentences[currentSentenceIndex]);
-        updateFloatingControls();
-      }
-    }
-    sendResponse({ success: true });
-  }
-  
-  else if (request.action === 'prev') {
-    if (currentSentenceIndex > 0) {
-      stopCurrentPlayback();
-      currentSentenceIndex--;
-      if (isPlaying) {
-        speakSentence(currentSentenceIndex);
-      } else {
-        highlightSentence(sentences[currentSentenceIndex]);
-        updateFloatingControls();
-      }
-    }
-    sendResponse({ success: true });
-  }
-  
-  else if (request.action === 'updateSpeed') {
-    currentSpeed = request.speed;
-    console.log('[LexiFlow] Speed updated to:', currentSpeed);
-    
-    // Apply speed change in real-time without restarting
-    if (currentProvider === 'puter' && puterTTS) {
-      puterTTS.setRate(currentSpeed);
-    }
-    // For browser TTS, rate changes apply to next utterance (browser limitation)
-    // But we don't restart the current one
-    
-    sendResponse({ success: true });
-  }
-  
-  else if (request.action === 'updateVoice') {
-    // Queue voice change for next sentence (don't interrupt current)
-    if (isPlaying) {
-      pendingVoiceChange = {
+  switch (request.action) {
+    case 'start':
+      const result = startReading({
+        speed: request.speed,
         voice: request.voice,
-        provider: request.provider || currentProvider
-      };
-      console.log('[LexiFlow] Voice change queued for next sentence:', request.voice);
-    } else {
-      currentVoice = request.voice;
-      if (request.provider) {
-        currentProvider = request.provider;
-      }
-      console.log('[LexiFlow] Voice updated to:', currentVoice);
-    }
-    sendResponse({ success: true });
-  }
-  
-  else if (request.action === 'changeProvider') {
-    if (isPlaying) {
-      pendingVoiceChange = {
-        voice: currentVoice,
         provider: request.provider
-      };
-      console.log('[LexiFlow] Provider change queued:', request.provider);
-    } else {
-      currentProvider = request.provider;
-      console.log('[LexiFlow] Provider changed to:', currentProvider);
-    }
-    sendResponse({ success: true });
-  }
-  
-  else if (request.action === 'getStatus') {
-    sendResponse({
-      isActive: isActive,
-      isPlaying: isPlaying,
-      currentIndex: currentSentenceIndex,
-      totalSentences: sentences.length,
-      provider: currentProvider,
-      voice: currentVoice,
-      speed: currentSpeed
-    });
-  }
-  
-  else if (request.action === 'getVoices') {
-    const voices = [];
-    
-    // Add Puter TTS voices
-    if (puterTTS) {
-      const puterVoices = puterTTS.getVoices();
-      puterVoices.forEach(v => {
-        voices.push({
-          id: v.id,
-          name: v.name,
-          provider: 'puter',
-          locale: v.locale,
-          gender: v.gender
-        });
       });
-    }
-    
-    // Add browser voices
-    const browserVoices = speechSynthesis.getVoices();
-    browserVoices
-      .filter(v => v.lang.startsWith('en'))
-      .forEach((v, i) => {
-        voices.push({
-          id: `browser-${i}`,
-          name: v.name,
-          provider: 'browser',
-          locale: v.lang
-        });
+      sendResponse(result);
+      break;
+      
+    case 'pause':
+      pauseAudio();
+      sendResponse({ success: true });
+      break;
+      
+    case 'resume':
+      resumeAudio();
+      sendResponse({ success: true });
+      break;
+      
+    case 'stop':
+      stopReading();
+      sendResponse({ success: true });
+      break;
+      
+    case 'next':
+      navigate('next');
+      sendResponse({ success: true });
+      break;
+      
+    case 'prev':
+      navigate('prev');
+      sendResponse({ success: true });
+      break;
+      
+    case 'updateSpeed':
+      updateSpeed(request.speed);
+      sendResponse({ success: true });
+      break;
+      
+    case 'updateVoice':
+      updateVoice(request.voice, request.provider);
+      sendResponse({ success: true });
+      break;
+      
+    case 'changeProvider':
+      updateVoice(state.voice, request.provider);
+      sendResponse({ success: true });
+      break;
+      
+    case 'getStatus':
+      sendResponse({
+        isActive: state.isActive,
+        isPlaying: state.isPlaying,
+        isPaused: state.isPaused,
+        currentIndex: state.currentSentenceIndex,
+        totalSentences: state.sentences.length,
+        provider: state.provider,
+        voice: state.voice,
+        speed: state.speed
       });
-    
-    sendResponse({ voices });
+      break;
+      
+    case 'getVoices':
+      const voices = [];
+      
+      // Sarvam voices
+      if (sarvamTTS) {
+        sarvamTTS.getVoices().forEach(v => {
+          voices.push({ ...v, provider: 'sarvam' });
+        });
+      }
+      
+      // Puter voices
+      if (puterTTS) {
+        puterTTS.getVoices().forEach(v => {
+          voices.push({ ...v, provider: 'puter' });
+        });
+      }
+      
+      // Browser voices
+      speechSynthesis.getVoices()
+        .filter(v => v.lang.startsWith('en'))
+        .forEach((v, i) => {
+          voices.push({
+            id: `browser-${i}`,
+            name: v.name,
+            provider: 'browser',
+            locale: v.lang
+          });
+        });
+      
+      sendResponse({ voices });
+      break;
   }
   
   return true;
 });
 
-// Floating Controls UI
+// Floating Controls
 function createFloatingControls() {
-  const container = document.createElement('div');
-  container.id = 'lexiflow-floating-controls';
-  container.innerHTML = `
-    <div class="lexiflow-logo" title="LexiFlow">
-      <svg width="28" height="28" viewBox="0 0 32 32">
-        <defs>
-          <linearGradient id="lexiflow-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#6D28D9"/>
-            <stop offset="100%" style="stop-color:#00F0FF"/>
-          </linearGradient>
-        </defs>
-        <circle cx="16" cy="16" r="14" fill="url(#lexiflow-grad)"/>
-        <path d="M 11 16 L 14 19 L 21 12" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-    </div>
-    <div class="lexiflow-controls-panel">
-      <div class="lexiflow-progress" id="lexiflow-progress-text">0 / 0</div>
-      <div class="lexiflow-buttons">
-        <button id="lexiflow-prev" title="Previous sentence">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z"/>
-          </svg>
+  const el = document.createElement('div');
+  el.id = 'lexiflow-floating-controls';
+  el.innerHTML = `
+    <div class="lf-panel">
+      <div class="lf-progress" id="lf-progress">0 / 0</div>
+      <div class="lf-buttons">
+        <button id="lf-prev" title="Previous">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z"/></svg>
         </button>
-        <button id="lexiflow-play" title="Play/Pause">
-          <svg id="lexiflow-play-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
+        <button id="lf-play" class="lf-play-btn" title="Play/Pause">
+          <svg id="lf-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
         </button>
-        <button id="lexiflow-next" title="Next sentence">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 18l8.5-6L6 6v12zm8.5 0h2V6h-2v12z"/>
-          </svg>
+        <button id="lf-next" title="Next">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm8.5 0h2V6h-2v12z"/></svg>
         </button>
-        <button id="lexiflow-close" title="Close LexiFlow">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-          </svg>
+        <button id="lf-close" title="Close">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
       </div>
     </div>
   `;
+  document.body.appendChild(el);
   
-  document.body.appendChild(container);
-  
-  // Event listeners
-  container.querySelector('#lexiflow-prev').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (currentSentenceIndex > 0) {
-      stopCurrentPlayback();
-      currentSentenceIndex--;
-      if (isPlaying) speakSentence(currentSentenceIndex);
-      else {
-        highlightSentence(sentences[currentSentenceIndex]);
-        updateFloatingControls();
-      }
-    }
-  });
-  
-  container.querySelector('#lexiflow-play').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (isPlaying) {
-      pauseReading();
-    } else {
-      resumeReading();
-    }
-  });
-  
-  container.querySelector('#lexiflow-next').addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (currentSentenceIndex < sentences.length - 1) {
-      stopCurrentPlayback();
-      currentSentenceIndex++;
-      if (isPlaying) speakSentence(currentSentenceIndex);
-      else {
-        highlightSentence(sentences[currentSentenceIndex]);
-        updateFloatingControls();
-      }
-    }
-  });
-  
-  container.querySelector('#lexiflow-close').addEventListener('click', (e) => {
-    e.stopPropagation();
-    hideFloatingControls();
+  el.querySelector('#lf-prev').onclick = (e) => { e.stopPropagation(); navigate('prev'); };
+  el.querySelector('#lf-next').onclick = (e) => { e.stopPropagation(); navigate('next'); };
+  el.querySelector('#lf-close').onclick = (e) => { 
+    e.stopPropagation(); 
     stopReading();
-    isActive = false;
-  });
+    state.isActive = false;
+    hideFloatingControls();
+  };
+  
+  el.querySelector('#lf-play').onclick = (e) => {
+    e.stopPropagation();
+    if (state.isPlaying && !state.isPaused) {
+      pauseAudio();
+    } else {
+      resumeAudio();
+    }
+  };
 }
 
 function showFloatingControls() {
-  let controls = document.getElementById('lexiflow-floating-controls');
-  if (!controls) {
+  let el = document.getElementById('lexiflow-floating-controls');
+  if (!el) {
     createFloatingControls();
-    controls = document.getElementById('lexiflow-floating-controls');
+    el = document.getElementById('lexiflow-floating-controls');
   }
-  controls.classList.add('visible');
+  el.classList.add('visible');
   updateFloatingControls();
 }
 
 function hideFloatingControls() {
-  const controls = document.getElementById('lexiflow-floating-controls');
-  if (controls) {
-    controls.classList.remove('visible');
-  }
+  const el = document.getElementById('lexiflow-floating-controls');
+  if (el) el.classList.remove('visible');
 }
 
 function updateFloatingControls() {
-  const controls = document.getElementById('lexiflow-floating-controls');
-  if (!controls) return;
+  const el = document.getElementById('lexiflow-floating-controls');
+  if (!el) return;
   
-  const progressText = controls.querySelector('#lexiflow-progress-text');
-  const playIcon = controls.querySelector('#lexiflow-play-icon');
-  const playBtn = controls.querySelector('#lexiflow-play');
+  const progress = el.querySelector('#lf-progress');
+  const playIcon = el.querySelector('#lf-play-icon');
   
-  if (progressText) {
-    progressText.textContent = `${currentSentenceIndex + 1} / ${sentences.length}`;
+  if (progress) {
+    progress.textContent = `${state.currentSentenceIndex + 1} / ${state.sentences.length}`;
   }
   
-  if (playIcon && playBtn) {
-    if (isPlaying) {
+  if (playIcon) {
+    if (state.isPlaying && !state.isPaused) {
       playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
-      playBtn.title = 'Pause';
     } else {
       playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
-      playBtn.title = 'Play';
     }
   }
 }
 
-// Add styles
+// Styles
 const style = document.createElement('style');
 style.textContent = `
-  @keyframes lexiflow-pulse {
-    0% { opacity: 0; transform: translateX(-20px) scale(0.98); }
-    100% { opacity: 1; transform: translateX(0) scale(1); }
-  }
-  
-  @keyframes lexiflow-glow {
-    0%, 100% { box-shadow: 0 0 20px rgba(109, 40, 217, 0.4); }
-    50% { box-shadow: 0 0 30px rgba(109, 40, 217, 0.6), 0 0 40px rgba(0, 240, 255, 0.3); }
-  }
-  
-  #lexiflow-highlight {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  
   #lexiflow-floating-controls {
     position: fixed;
     bottom: 24px;
     right: 24px;
     z-index: 2147483647;
-    display: flex;
-    align-items: center;
-    gap: 12px;
     opacity: 0;
     transform: translateY(100px);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s ease;
     pointer-events: none;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   }
-  
   #lexiflow-floating-controls.visible {
     opacity: 1;
     transform: translateY(0);
     pointer-events: auto;
   }
-  
-  .lexiflow-logo {
-    width: 48px;
-    height: 48px;
-    background: linear-gradient(135deg, #1a1a2e, #16213e);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 20px rgba(109, 40, 217, 0.4), 0 0 0 1px rgba(109, 40, 217, 0.3);
-    cursor: pointer;
-    transition: all 0.2s ease;
-    animation: lexiflow-glow 3s ease-in-out infinite;
-  }
-  
-  .lexiflow-logo:hover {
-    transform: scale(1.1);
-    box-shadow: 0 6px 30px rgba(109, 40, 217, 0.6);
-  }
-  
-  .lexiflow-controls-panel {
+  .lf-panel {
     background: rgba(10, 10, 20, 0.95);
     backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(109, 40, 217, 0.3);
+    border: 1px solid rgba(109, 40, 217, 0.4);
     border-radius: 16px;
     padding: 12px 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   }
-  
-  .lexiflow-progress {
+  .lf-progress {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255,255,255,0.6);
     text-align: center;
     margin-bottom: 8px;
-    font-weight: 500;
-    letter-spacing: 0.5px;
   }
-  
-  .lexiflow-buttons {
+  .lf-buttons {
     display: flex;
     gap: 6px;
     align-items: center;
   }
-  
-  .lexiflow-buttons button {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+  .lf-buttons button {
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.2);
     color: #fff;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border-radius: 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s ease;
+    transition: all 0.15s;
   }
-  
-  .lexiflow-buttons button:hover {
-    background: rgba(109, 40, 217, 0.3);
-    border-color: rgba(109, 40, 217, 0.5);
+  .lf-buttons button:hover {
+    background: rgba(109, 40, 217, 0.4);
+    border-color: rgba(109, 40, 217, 0.6);
+  }
+  .lf-buttons button svg {
+    width: 16px;
+    height: 16px;
+  }
+  .lf-play-btn {
+    background: linear-gradient(135deg, #6D28D9, #7C3AED) !important;
+    border: none !important;
+    width: 44px !important;
+    height: 44px !important;
+    border-radius: 10px !important;
+  }
+  .lf-play-btn:hover {
+    background: linear-gradient(135deg, #7C3AED, #8B5CF6) !important;
     transform: scale(1.05);
   }
-  
-  .lexiflow-buttons button:active {
-    transform: scale(0.95);
+  .lf-play-btn svg {
+    width: 20px !important;
+    height: 20px !important;
   }
-  
-  #lexiflow-play {
-    background: linear-gradient(135deg, #6D28D9, #7C3AED);
-    border-color: transparent;
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(109, 40, 217, 0.4);
-  }
-  
-  #lexiflow-play:hover {
-    background: linear-gradient(135deg, #7C3AED, #8B5CF6);
-    transform: scale(1.08);
-    box-shadow: 0 4px 15px rgba(109, 40, 217, 0.5);
-  }
-  
-  #lexiflow-close {
-    background: rgba(255, 255, 255, 0.05);
-  }
-  
-  #lexiflow-close:hover {
-    background: rgba(220, 38, 38, 0.4);
-    border-color: rgba(220, 38, 38, 0.6);
+  #lf-close:hover {
+    background: rgba(220, 38, 38, 0.5) !important;
+    border-color: rgba(220, 38, 38, 0.7) !important;
   }
 `;
 document.head.appendChild(style);
 
-console.log('[LexiFlow] Extension ready');
-console.log('[LexiFlow] 💡 Click any sentence to start reading from there');
+console.log('[LexiFlow] Ready - Click any text to start reading from there');
 
-// Notify background script
+// Notify background
 chrome.runtime.sendMessage({ action: 'contentScriptLoaded', url: window.location.href }, () => {
-  if (chrome.runtime.lastError) {
-    // Ignore
-  }
+  if (chrome.runtime.lastError) {}
 });
