@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "LexiFlow - Documentation Reader",
-  "version": "1.0.0",
-  "description": "Read documentation line-by-line with AI-powered assistance and synchronized highlighting",
+  "version": "1.1.0",
+  "description": "Read documentation aloud with high-quality neural voices and synchronized highlighting",
   "permissions": [
     "activeTab",
     "storage",
