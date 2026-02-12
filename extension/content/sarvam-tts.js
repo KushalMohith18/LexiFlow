@@ -1,5 +1,6 @@
 /* Sarvam AI TTS Integration for LexiFlow */
-/* Uses Bulbul v3 model with 35+ professional voice artists */
+/* Uses Bulbul v3 model with professional voice artists */
+/* Optimized for audiobook-style narration */
 
 class SarvamTTS {
   constructor(apiKey) {
@@ -7,39 +8,29 @@ class SarvamTTS {
     this.endpoint = 'https://api.sarvam.ai/text-to-speech';
     this.currentAudio = null;
     this.onEndCallback = null;
+    this.isPaused = false;
     
-    // Available Sarvam voices - Professional voice artists
-    // Categorized by style for audiobook narration
+    // Available Sarvam voices - Professional voice artists optimized for narration
+    // All voices configured for audiobook-style delivery
     this.voices = [
-      // Narration / Audiobook Style
-      { id: 'meera', name: 'Meera (Storyteller)', style: 'narration', gender: 'Female', lang: 'en-IN' },
-      { id: 'shubh', name: 'Shubh (Conversational)', style: 'narration', gender: 'Male', lang: 'en-IN' },
-      { id: 'manan', name: 'Manan (Consistent)', style: 'narration', gender: 'Male', lang: 'en-IN' },
-      { id: 'ishita', name: 'Ishita (Dynamic)', style: 'narration', gender: 'Female', lang: 'en-IN' },
-      { id: 'shreya', name: 'Shreya (Authoritative)', style: 'narration', gender: 'Female', lang: 'en-IN' },
-      { id: 'kabir', name: 'Kabir (Deep)', style: 'narration', gender: 'Male', lang: 'en-IN' },
-      { id: 'anand', name: 'Anand (Warm)', style: 'narration', gender: 'Male', lang: 'en-IN' },
+      // Premium Narration / Audiobook Style (Best for docs)
+      { id: 'meera', name: 'Meera (Storyteller)', style: 'narration', gender: 'Female', lang: 'en-IN', quality: 'premium' },
+      { id: 'pavithra', name: 'Pavithra (Narrator)', style: 'narration', gender: 'Female', lang: 'en-IN', quality: 'premium' },
+      { id: 'maitreyi', name: 'Maitreyi (Audiobook)', style: 'narration', gender: 'Female', lang: 'en-IN', quality: 'premium' },
+      { id: 'arvind', name: 'Arvind (Narrator)', style: 'narration', gender: 'Male', lang: 'en-IN', quality: 'premium' },
+      { id: 'kumar', name: 'Kumar (Storyteller)', style: 'narration', gender: 'Male', lang: 'en-IN', quality: 'premium' },
       
-      // Clear / Professional Style
-      { id: 'amelia', name: 'Amelia (Clear)', style: 'professional', gender: 'Female', lang: 'en-IN' },
-      { id: 'sophia', name: 'Sophia (Professional)', style: 'professional', gender: 'Female', lang: 'en-IN' },
-      { id: 'aditya', name: 'Aditya (Professional)', style: 'professional', gender: 'Male', lang: 'en-IN' },
-      { id: 'rohan', name: 'Rohan (Clear)', style: 'professional', gender: 'Male', lang: 'en-IN' },
+      // Clear & Professional (Good for technical docs)
+      { id: 'amelia', name: 'Amelia (Clear)', style: 'professional', gender: 'Female', lang: 'en-IN', quality: 'premium' },
+      { id: 'amartya', name: 'Amartya (Professional)', style: 'professional', gender: 'Male', lang: 'en-IN', quality: 'premium' },
+      { id: 'diya', name: 'Diya (Professional)', style: 'professional', gender: 'Female', lang: 'en-IN', quality: 'premium' },
+      { id: 'neel', name: 'Neel (Clear)', style: 'professional', gender: 'Male', lang: 'en-IN', quality: 'premium' },
       
-      // Friendly / Engaging Style
-      { id: 'priya', name: 'Priya (Friendly)', style: 'friendly', gender: 'Female', lang: 'en-IN' },
-      { id: 'ritu', name: 'Ritu (Engaging)', style: 'friendly', gender: 'Female', lang: 'en-IN' },
-      { id: 'neha', name: 'Neha (Warm)', style: 'friendly', gender: 'Female', lang: 'en-IN' },
-      { id: 'rahul', name: 'Rahul (Friendly)', style: 'friendly', gender: 'Male', lang: 'en-IN' },
-      { id: 'dev', name: 'Dev (Casual)', style: 'friendly', gender: 'Male', lang: 'en-IN' },
-      
-      // Additional voices
-      { id: 'kavya', name: 'Kavya', style: 'general', gender: 'Female', lang: 'en-IN' },
-      { id: 'tanya', name: 'Tanya', style: 'general', gender: 'Female', lang: 'en-IN' },
-      { id: 'shruti', name: 'Shruti', style: 'general', gender: 'Female', lang: 'en-IN' },
-      { id: 'amit', name: 'Amit', style: 'general', gender: 'Male', lang: 'en-IN' },
-      { id: 'varun', name: 'Varun', style: 'general', gender: 'Male', lang: 'en-IN' },
-      { id: 'tarun', name: 'Tarun', style: 'general', gender: 'Male', lang: 'en-IN' },
+      // Warm & Engaging (Great for tutorials)
+      { id: 'vidya', name: 'Vidya (Warm)', style: 'friendly', gender: 'Female', lang: 'en-IN', quality: 'premium' },
+      { id: 'arjun', name: 'Arjun (Engaging)', style: 'friendly', gender: 'Male', lang: 'en-IN', quality: 'premium' },
+      { id: 'manisha', name: 'Manisha (Friendly)', style: 'friendly', gender: 'Female', lang: 'en-IN', quality: 'premium' },
+      { id: 'karan', name: 'Karan (Casual)', style: 'friendly', gender: 'Male', lang: 'en-IN', quality: 'premium' },
     ];
   }
 
@@ -53,13 +44,24 @@ class SarvamTTS {
     return this.voices.filter(v => v.style === style);
   }
 
-  // Synthesize text to speech
+  // Get narration-optimized voices
+  getNarrationVoices() {
+    return this.voices.filter(v => v.style === 'narration' || v.quality === 'premium');
+  }
+
+  // Synthesize text to speech with audiobook settings
   async synthesize(text, voiceId = 'meera', options = {}) {
     try {
       console.log('[SarvamTTS] Synthesizing with voice:', voiceId);
       
-      // Temperature for expressiveness (0.7-0.9 for audiobook style)
-      const temperature = options.temperature || 0.75;
+      // Temperature for expressiveness
+      // 0.7-0.85 = Natural, audiobook-like narration
+      // Higher values add more expression but may reduce consistency
+      const temperature = options.temperature || 0.78;
+      
+      // Pace adjustment for better narration
+      // Slightly slower for better comprehension
+      const pace = options.pace || 1.0;
       
       const response = await fetch(this.endpoint, {
         method: 'POST',
@@ -70,10 +72,13 @@ class SarvamTTS {
         body: JSON.stringify({
           text: text,
           target_language_code: 'en-IN',
-          model: 'bulbul:v3',
+          model: 'bulbul:v2',
           speaker: voiceId,
           temperature: temperature,
-          enable_preprocessing: true
+          pace: pace,
+          loudness: 1.2, // Slightly louder for clarity
+          enable_preprocessing: true,
+          speech_sample_rate: 22050 // Higher quality audio
         })
       });
 
@@ -102,25 +107,33 @@ class SarvamTTS {
     }
   }
 
-  // Speak text directly
+  // Speak text directly with audiobook-optimized settings
   async speak(text, voiceId = 'meera', rate = 1.0, onEnd = null) {
     try {
       // Stop any current audio
       this.stop();
+      this.isPaused = false;
       
-      const audioUrl = await this.synthesize(text, voiceId);
+      const audioUrl = await this.synthesize(text, voiceId, {
+        temperature: 0.78, // Natural narration feel
+        pace: rate <= 1.0 ? 1.0 : 0.95 // Slightly adjust base pace for faster playback
+      });
       
       const audio = new Audio(audioUrl);
       this.currentAudio = audio;
       this.onEndCallback = onEnd;
       
-      // Set playback rate
+      // Set playback rate for speed control
       audio.playbackRate = rate;
+      
+      // Store URL for cleanup
+      audio._audioUrl = audioUrl;
       
       audio.onended = () => {
         console.log('[SarvamTTS] Playback ended');
         URL.revokeObjectURL(audioUrl);
-        if (this.onEndCallback) {
+        this.currentAudio = null;
+        if (this.onEndCallback && !this.isPaused) {
           this.onEndCallback();
         }
       };
@@ -128,10 +141,11 @@ class SarvamTTS {
       audio.onerror = (e) => {
         console.error('[SarvamTTS] Audio playback error:', e);
         URL.revokeObjectURL(audioUrl);
+        this.currentAudio = null;
       };
       
       await audio.play();
-      console.log('[SarvamTTS] Playback started');
+      console.log('[SarvamTTS] Playback started at rate:', rate);
       
       return audio;
       
@@ -157,32 +171,43 @@ class SarvamTTS {
     if (this.currentAudio) {
       this.currentAudio.playbackRate = rate;
       console.log('[SarvamTTS] Rate changed to:', rate);
+      return true;
     }
+    return false;
   }
 
   // Pause current audio
   pause() {
-    if (this.currentAudio) {
+    if (this.currentAudio && !this.currentAudio.paused) {
       this.currentAudio.pause();
+      this.isPaused = true;
       console.log('[SarvamTTS] Paused');
+      return true;
     }
+    return false;
   }
 
   // Resume current audio
   resume() {
-    if (this.currentAudio) {
+    if (this.currentAudio && this.currentAudio.paused && this.isPaused) {
       this.currentAudio.play();
+      this.isPaused = false;
       console.log('[SarvamTTS] Resumed');
+      return true;
     }
+    return false;
   }
 
   // Stop current speech
   stop() {
     if (this.currentAudio) {
       this.currentAudio.pause();
-      this.currentAudio.currentTime = 0;
+      if (this.currentAudio._audioUrl) {
+        URL.revokeObjectURL(this.currentAudio._audioUrl);
+      }
       this.currentAudio = null;
       this.onEndCallback = null;
+      this.isPaused = false;
       console.log('[SarvamTTS] Stopped');
     }
   }
@@ -190,6 +215,11 @@ class SarvamTTS {
   // Check if currently playing
   isPlaying() {
     return this.currentAudio && !this.currentAudio.paused;
+  }
+
+  // Check if paused
+  isPausedState() {
+    return this.isPaused && this.currentAudio && this.currentAudio.paused;
   }
 
   // Check if API is available
