@@ -237,53 +237,75 @@ function sendStatusUpdate() {
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  console.log('[LexiFlow] Received message:', request.action);
+  
   if (request.action === 'start') {
+    console.log('[LexiFlow] Starting reading...');
     if (!isActive || sentences.length === 0) {
       // First time - extract content
-      extractContent();
-      isActive = true;
-      currentSentenceIndex = 0;
+      try {
+        extractContent();
+        if (sentences.length === 0) {
+          console.error('[LexiFlow] No sentences found');
+          sendResponse({ success: false, error: 'No content found on this page' });
+          return true;
+        }
+        isActive = true;
+        currentSentenceIndex = 0;
+      } catch (error) {
+        console.error('[LexiFlow] Extract error:', error);
+        sendResponse({ success: false, error: error.message });
+        return true;
+      }
     }
     isPlaying = true;
     speakSentence(currentSentenceIndex, request.speed || 1.0, parseInt(request.voice) || 0);
-    sendResponse({ success: true });
+    sendResponse({ success: true, sentences: sentences.length });
   }
   
   else if (request.action === 'pause') {
+    console.log('[LexiFlow] Pausing...');
     pauseReading();
     sendResponse({ success: true });
   }
   
   else if (request.action === 'next') {
+    console.log('[LexiFlow] Next sentence...');
     if (currentSentenceIndex < sentences.length - 1) {
       speechSynthesis.cancel();
-      speakSentence(currentSentenceIndex + 1, request.speed || 1.0, parseInt(request.voice) || 0);
+      speakSentence(currentSentenceIndex + 1, currentSpeed, currentVoice);
     }
     sendResponse({ success: true });
   }
   
   else if (request.action === 'prev') {
+    console.log('[LexiFlow] Previous sentence...');
     if (currentSentenceIndex > 0) {
       speechSynthesis.cancel();
-      speakSentence(currentSentenceIndex - 1, request.speed || 1.0, parseInt(request.voice) || 0);
+      speakSentence(currentSentenceIndex - 1, currentSpeed, currentVoice);
     }
     sendResponse({ success: true });
   }
   
   else if (request.action === 'updateSpeed') {
-    if (utterance) {
+    console.log('[LexiFlow] Updating speed to:', request.speed);
+    currentSpeed = request.speed;
+    if (utterance && isPlaying) {
+      // Note: Cannot change speed of current utterance, will apply to next
       utterance.rate = request.speed;
     }
     sendResponse({ success: true });
   }
   
   else if (request.action === 'getStatus') {
-    sendResponse({
+    const status = {
       isActive: isActive,
       isPlaying: isPlaying,
       currentIndex: currentSentenceIndex,
       totalSentences: sentences.length
-    });
+    };
+    console.log('[LexiFlow] Status:', status);
+    sendResponse(status);
   }
   
   else if (request.action === 'getContent') {
@@ -293,7 +315,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ content: sentences.join(' ') });
   }
   
-  return true;
+  return true; // Keep channel open for async response
 });
 
 // Add CSS animation
