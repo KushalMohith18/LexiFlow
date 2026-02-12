@@ -180,11 +180,14 @@ async function openChat() {
   
   // Extract page content
   chrome.tabs.sendMessage(tab.id, { action: 'getContent' }, async (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('Chat error:', chrome.runtime.lastError);
+      alert('Cannot access page content. Please refresh the page and try again.');
+      return;
+    }
     if (response && response.content) {
-      // Open backend chat interface
-      const backendUrl = 'REACT_APP_BACKEND_URL_PLACEHOLDER';
-      const chatUrl = `${backendUrl}?content=${encodeURIComponent(response.content.substring(0, 2000))}`;
-      chrome.tabs.create({ url: chatUrl });
+      // For now, just show an alert with preview
+      alert('Chat feature coming soon! Document has ' + response.content.split(' ').length + ' words.');
     }
   });
 }
@@ -194,4 +197,5 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'statusUpdate') {
     updateStatus(request.status);
   }
+  return true;
 });
