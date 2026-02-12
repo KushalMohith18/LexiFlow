@@ -112,11 +112,33 @@
     }
     input[type="range"] {
       accent-color: #6D28D9;
+      padding: 0;
+      height: 6px;
+      cursor: pointer;
+    }
+    .speed-slider {
+      margin-bottom: 8px;
+    }
+    .speed-marks {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #666;
+      padding: 0 2px;
+    }
+    .setting-select {
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .setting-select:hover {
+      border-color: #6D28D9;
     }
     .speed-value {
       float: right;
       color: #6D28D9;
       font-weight: 600;
+      min-width: 45px;
+      text-align: right;
     }
     .progress {
       text-align: center;
