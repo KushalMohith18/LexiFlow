@@ -1,4 +1,5 @@
 /* LexiFlow Content Script - Multi-Provider TTS with Audiobook Narration */
+/* Version 2.0 - Enhanced pause/play, real-time switching, Sarvam integration */
 
 // State management
 const state = {
@@ -11,21 +12,26 @@ const state = {
   voice: 'Joanna',
   provider: 'puter',
   pendingVoiceChange: null,
-  highlightElement: null
+  pendingSpeedChange: null,
+  highlightElement: null,
+  audioState: 'idle' // idle, playing, paused
 };
 
 // TTS Providers
 let puterTTS = null;
 let sarvamTTS = null;
-let currentAudio = null; // Track current audio element globally
 
 // Sarvam API Key
 const SARVAM_API_KEY = 'sk_jskshbhw_yh51ve4TLQEvERGAqRGw1XHE';
 
-console.log('[LexiFlow] Content script loaded');
+// Browser TTS state tracking
+let browserUtterance = null;
+
+console.log('[LexiFlow] Content script v2.0 loaded');
 
 // Initialize TTS providers
 function initProviders() {
+  // Initialize Puter TTS
   if (typeof PuterTTS !== 'undefined') {
     puterTTS = new PuterTTS();
     puterTTS.load().then(() => {
@@ -35,9 +41,10 @@ function initProviders() {
     });
   }
   
+  // Initialize Sarvam TTS
   if (typeof SarvamTTS !== 'undefined') {
     sarvamTTS = new SarvamTTS(SARVAM_API_KEY);
-    console.log('[LexiFlow] Sarvam TTS ready');
+    console.log('[LexiFlow] Sarvam TTS ready with API key');
   }
 }
 
@@ -127,7 +134,7 @@ function highlight(text) {
       document.body.appendChild(el);
       state.highlightElement = el;
 
-      // Scroll to eye level
+      // Scroll to eye level (1/3 from top for comfortable reading)
       const targetY = rect.top + window.scrollY - (window.innerHeight / 3);
       window.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' });
       break;
@@ -142,8 +149,12 @@ function removeHighlight() {
   }
 }
 
-// Stop all audio playback
+// ==================== AUDIO CONTROL ====================
+
+// Stop all audio playback completely
 function stopAllAudio() {
+  console.log('[LexiFlow] Stopping all audio');
+  
   // Stop Puter TTS
   if (puterTTS) {
     puterTTS.stop();
@@ -156,135 +167,174 @@ function stopAllAudio() {
   
   // Stop browser TTS
   speechSynthesis.cancel();
+  browserUtterance = null;
   
-  // Stop any tracked audio
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.src = '';
-    currentAudio = null;
-  }
+  state.audioState = 'idle';
 }
 
-// Pause audio
+// Pause audio - properly track state
 function pauseAudio() {
-  state.isPaused = true;
-  state.isPlaying = false;
+  console.log('[LexiFlow] Pause requested, provider:', state.provider, 'audioState:', state.audioState);
   
-  if (state.provider === 'puter' && puterTTS && puterTTS.currentAudio) {
-    puterTTS.currentAudio.pause();
-  } else if (state.provider === 'sarvam' && sarvamTTS && sarvamTTS.currentAudio) {
-    sarvamTTS.currentAudio.pause();
+  let paused = false;
+  
+  if (state.provider === 'puter' && puterTTS) {
+    paused = puterTTS.pause();
+  } else if (state.provider === 'sarvam' && sarvamTTS) {
+    paused = sarvamTTS.pause();
   } else if (state.provider === 'browser') {
-    speechSynthesis.pause();
+    if (speechSynthesis.speaking && !speechSynthesis.paused) {
+      speechSynthesis.pause();
+      paused = true;
+    }
   }
   
-  if (currentAudio) {
-    currentAudio.pause();
+  if (paused) {
+    state.isPaused = true;
+    state.isPlaying = false;
+    state.audioState = 'paused';
+    console.log('[LexiFlow] Audio paused successfully');
+  } else {
+    console.log('[LexiFlow] Nothing to pause');
+    state.isPaused = true;
+    state.isPlaying = false;
+    state.audioState = 'paused';
   }
   
   updateUI();
-  console.log('[LexiFlow] Paused');
 }
 
-// Resume audio
+// Resume audio - properly handle all providers
 function resumeAudio() {
-  state.isPaused = false;
-  state.isPlaying = true;
+  console.log('[LexiFlow] Resume requested, provider:', state.provider, 'audioState:', state.audioState);
   
   let resumed = false;
   
-  if (state.provider === 'puter' && puterTTS && puterTTS.currentAudio && puterTTS.currentAudio.paused) {
-    puterTTS.currentAudio.play();
-    resumed = true;
-  } else if (state.provider === 'sarvam' && sarvamTTS && sarvamTTS.currentAudio && sarvamTTS.currentAudio.paused) {
-    sarvamTTS.currentAudio.play();
-    resumed = true;
-  } else if (state.provider === 'browser' && speechSynthesis.paused) {
-    speechSynthesis.resume();
-    resumed = true;
+  if (state.provider === 'puter' && puterTTS) {
+    resumed = puterTTS.resume();
+  } else if (state.provider === 'sarvam' && sarvamTTS) {
+    resumed = sarvamTTS.resume();
+  } else if (state.provider === 'browser') {
+    if (speechSynthesis.paused) {
+      speechSynthesis.resume();
+      resumed = true;
+    }
   }
   
-  if (currentAudio && currentAudio.paused) {
-    currentAudio.play();
-    resumed = true;
-  }
-  
-  // If nothing to resume, start speaking current sentence
-  if (!resumed) {
+  if (resumed) {
+    state.isPaused = false;
+    state.isPlaying = true;
+    state.audioState = 'playing';
+    console.log('[LexiFlow] Audio resumed successfully');
+  } else {
+    // If nothing to resume, start speaking current sentence fresh
+    console.log('[LexiFlow] Nothing to resume, starting fresh');
+    state.isPaused = false;
+    state.isPlaying = true;
+    state.audioState = 'playing';
     speakSentence(state.currentSentenceIndex);
   }
   
   updateUI();
-  console.log('[LexiFlow] Resumed');
 }
 
-// Update playback speed in real-time
+// ==================== REAL-TIME CONTROLS ====================
+
+// Update playback speed in real-time (seamless, no restart)
 function updateSpeed(newSpeed) {
+  const oldSpeed = state.speed;
   state.speed = newSpeed;
   
-  // Apply to current audio immediately
-  if (puterTTS && puterTTS.currentAudio) {
-    puterTTS.currentAudio.playbackRate = newSpeed;
-  }
-  if (sarvamTTS && sarvamTTS.currentAudio) {
-    sarvamTTS.currentAudio.playbackRate = newSpeed;
-  }
-  if (currentAudio) {
-    currentAudio.playbackRate = newSpeed;
-  }
-  // Browser TTS rate is set per utterance, can't change mid-speech
+  let applied = false;
   
-  console.log('[LexiFlow] Speed updated to:', newSpeed);
+  // Apply to current audio immediately based on provider
+  if (state.provider === 'puter' && puterTTS) {
+    applied = puterTTS.setRate(newSpeed);
+  } else if (state.provider === 'sarvam' && sarvamTTS) {
+    applied = sarvamTTS.setRate(newSpeed);
+  } else if (state.provider === 'browser') {
+    // Browser TTS: rate change takes effect on next utterance
+    // For seamless experience, we'll restart current sentence
+    if (state.isPlaying && browserUtterance) {
+      speechSynthesis.cancel();
+      speakSentence(state.currentSentenceIndex);
+      applied = true;
+    }
+  }
+  
+  console.log('[LexiFlow] Speed updated:', oldSpeed, '->', newSpeed, applied ? '(applied)' : '(will apply next)');
 }
 
-// Queue voice change for next sentence
-function updateVoice(newVoice, newProvider) {
-  if (state.isPlaying && !state.isPaused) {
-    // Queue for next sentence
-    state.pendingVoiceChange = { voice: newVoice, provider: newProvider || state.provider };
-    console.log('[LexiFlow] Voice change queued:', newVoice);
-  } else {
+// Update voice - seamless transition on next sentence OR immediate if requested
+function updateVoice(newVoice, newProvider, immediate = false) {
+  const oldVoice = state.voice;
+  const oldProvider = state.provider;
+  
+  if (immediate || !state.isPlaying || state.isPaused) {
     // Apply immediately
     state.voice = newVoice;
     if (newProvider) state.provider = newProvider;
-    console.log('[LexiFlow] Voice changed to:', newVoice);
+    console.log('[LexiFlow] Voice changed immediately:', oldVoice, '->', newVoice);
+    
+    // If playing, restart current sentence with new voice
+    if (state.isPlaying && !state.isPaused) {
+      stopAllAudio();
+      speakSentence(state.currentSentenceIndex);
+    }
+  } else {
+    // Queue for seamless transition at next sentence boundary
+    state.pendingVoiceChange = { voice: newVoice, provider: newProvider || state.provider };
+    console.log('[LexiFlow] Voice change queued for next sentence:', newVoice);
   }
 }
 
-// Apply pending voice change
+// Apply pending changes at sentence boundary
 function applyPendingChanges() {
   if (state.pendingVoiceChange) {
     state.voice = state.pendingVoiceChange.voice;
     state.provider = state.pendingVoiceChange.provider;
     state.pendingVoiceChange = null;
-    console.log('[LexiFlow] Applied pending voice:', state.voice);
+    console.log('[LexiFlow] Applied pending voice change:', state.voice);
   }
 }
+
+// ==================== SENTENCE HANDLING ====================
 
 // Handle sentence completion
 function onSentenceEnd() {
   console.log('[LexiFlow] Sentence', state.currentSentenceIndex + 1, 'completed');
   
+  // Don't proceed if we were paused
+  if (state.isPaused || state.audioState === 'paused') {
+    console.log('[LexiFlow] Paused, not advancing');
+    return;
+  }
+  
   // Apply any pending voice changes
   applyPendingChanges();
   
   if (state.isPlaying && state.currentSentenceIndex < state.sentences.length - 1) {
-    // Short pause between sentences for natural audiobook feel
+    // Audiobook-style pause between sentences (300-400ms feels natural)
     setTimeout(() => {
-      state.currentSentenceIndex++;
-      speakSentence(state.currentSentenceIndex);
+      if (state.isPlaying && !state.isPaused) {
+        state.currentSentenceIndex++;
+        speakSentence(state.currentSentenceIndex);
+      }
     }, 350);
   } else if (state.currentSentenceIndex >= state.sentences.length - 1) {
     // Finished all sentences
     state.isPlaying = false;
     state.isPaused = false;
+    state.audioState = 'idle';
     removeHighlight();
     updateUI();
-    console.log('[LexiFlow] Finished reading');
+    console.log('[LexiFlow] Finished reading all sentences');
   }
 }
 
-// Speak using Puter TTS
+// ==================== TTS PROVIDERS ====================
+
+// Speak using Puter TTS (High Quality Neural Voices)
 async function speakWithPuter(text) {
   try {
     if (!puterTTS || !(await puterTTS.isAvailable())) {
@@ -292,16 +342,17 @@ async function speakWithPuter(text) {
     }
     
     await puterTTS.speak(text, state.voice, state.speed, onSentenceEnd);
-    currentAudio = puterTTS.currentAudio;
+    state.audioState = 'playing';
     
   } catch (error) {
     console.error('[LexiFlow] Puter TTS error:', error);
-    // Fallback to browser
+    // Fallback to browser TTS
+    console.log('[LexiFlow] Falling back to browser TTS');
     speakWithBrowser(text);
   }
 }
 
-// Speak using Sarvam TTS
+// Speak using Sarvam TTS (Indian Neural Voices)
 async function speakWithSarvam(text) {
   try {
     if (!sarvamTTS || !(await sarvamTTS.isAvailable())) {
@@ -309,51 +360,76 @@ async function speakWithSarvam(text) {
     }
     
     await sarvamTTS.speak(text, state.voice, state.speed, onSentenceEnd);
-    currentAudio = sarvamTTS.currentAudio;
+    state.audioState = 'playing';
     
   } catch (error) {
     console.error('[LexiFlow] Sarvam TTS error:', error);
-    // Fallback to browser
+    // Fallback to browser TTS
+    console.log('[LexiFlow] Falling back to browser TTS');
     speakWithBrowser(text);
   }
 }
 
-// Speak using Browser TTS
+// Speak using Browser TTS with audiobook-optimized settings
 function speakWithBrowser(text) {
   speechSynthesis.cancel();
   
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.rate = state.speed;
+  browserUtterance = utterance;
   
-  // Get best voice
+  // Audiobook-style settings
+  utterance.rate = state.speed;
+  utterance.pitch = 1.0; // Natural pitch
+  utterance.volume = 1.0;
+  
+  // Get voices and select best one for narration
   const voices = speechSynthesis.getVoices();
   const sorted = voices.sort((a, b) => {
-    const keywords = ['enhanced', 'premium', 'natural', 'neural', 'google', 'microsoft'];
-    const aScore = keywords.some(k => a.name.toLowerCase().includes(k)) ? 1 : 0;
-    const bScore = keywords.some(k => b.name.toLowerCase().includes(k)) ? 1 : 0;
+    // Prioritize high-quality voices for audiobook experience
+    const keywords = ['enhanced', 'premium', 'natural', 'neural', 'google us', 'microsoft', 'samantha', 'daniel'];
+    const aScore = keywords.some(k => a.name.toLowerCase().includes(k)) ? 2 : 
+                   (a.name.toLowerCase().includes('google') || a.name.toLowerCase().includes('microsoft')) ? 1 : 0;
+    const bScore = keywords.some(k => b.name.toLowerCase().includes(k)) ? 2 :
+                   (b.name.toLowerCase().includes('google') || b.name.toLowerCase().includes('microsoft')) ? 1 : 0;
     if (aScore !== bScore) return bScore - aScore;
     if (a.lang.startsWith('en') && !b.lang.startsWith('en')) return -1;
     if (!a.lang.startsWith('en') && b.lang.startsWith('en')) return 1;
     return 0;
   });
   
+  // Set voice based on selection
   if (state.voice && state.voice.startsWith('browser-')) {
     const idx = parseInt(state.voice.replace('browser-', ''), 10);
     if (sorted[idx]) utterance.voice = sorted[idx];
   } else if (sorted.length > 0) {
+    // Default to best English voice
     utterance.voice = sorted.find(v => v.lang.startsWith('en')) || sorted[0];
   }
   
-  utterance.onend = onSentenceEnd;
-  utterance.onerror = (e) => {
-    console.error('[LexiFlow] Browser TTS error:', e);
+  utterance.onend = () => {
+    browserUtterance = null;
     onSentenceEnd();
   };
   
+  utterance.onerror = (e) => {
+    console.error('[LexiFlow] Browser TTS error:', e);
+    browserUtterance = null;
+    onSentenceEnd();
+  };
+  
+  utterance.onpause = () => {
+    console.log('[LexiFlow] Browser TTS paused');
+  };
+  
+  utterance.onresume = () => {
+    console.log('[LexiFlow] Browser TTS resumed');
+  };
+  
   speechSynthesis.speak(utterance);
+  state.audioState = 'playing';
 }
 
-// Main speak function
+// Main speak function - routes to appropriate provider
 async function speakSentence(index) {
   if (index < 0 || index >= state.sentences.length) {
     console.log('[LexiFlow] Invalid index:', index);
@@ -364,7 +440,8 @@ async function speakSentence(index) {
   state.isPaused = false;
   const text = state.sentences[index];
   
-  console.log('[LexiFlow] Speaking', index + 1, '/', state.sentences.length, '| Provider:', state.provider, '| Voice:', state.voice);
+  console.log('[LexiFlow] Speaking', index + 1, '/', state.sentences.length, 
+              '| Provider:', state.provider, '| Voice:', state.voice, '| Speed:', state.speed);
   
   highlight(text);
   updateUI();
@@ -379,25 +456,34 @@ async function speakSentence(index) {
   }
 }
 
+// ==================== MAIN CONTROLS ====================
+
 // Start reading
 function startReading(options = {}) {
   if (state.sentences.length === 0) {
     extractContent();
     if (state.sentences.length === 0) {
-      return { success: false, error: 'No content found' };
+      return { success: false, error: 'No readable content found on this page' };
     }
   }
   
-  state.isActive = true;
-  state.isPlaying = true;
-  state.isPaused = false;
+  // Apply options
   state.speed = options.speed || state.speed;
   state.voice = options.voice || state.voice;
   state.provider = options.provider || state.provider;
   
-  if (!state.isActive) {
+  // Set state
+  state.isActive = true;
+  state.isPlaying = true;
+  state.isPaused = false;
+  state.audioState = 'playing';
+  
+  // Start from beginning if not already active
+  if (state.currentSentenceIndex === 0 || !state.isActive) {
     state.currentSentenceIndex = 0;
   }
+  
+  console.log('[LexiFlow] Starting reading with provider:', state.provider, 'voice:', state.voice);
   
   showFloatingControls();
   speakSentence(state.currentSentenceIndex);
@@ -410,6 +496,7 @@ function stopReading() {
   stopAllAudio();
   state.isPlaying = false;
   state.isPaused = false;
+  state.audioState = 'idle';
   removeHighlight();
   updateUI();
 }
@@ -426,14 +513,15 @@ function navigate(direction) {
   
   highlight(state.sentences[state.currentSentenceIndex]);
   
-  if (state.isPlaying) {
+  if (state.isPlaying || state.audioState === 'playing') {
     speakSentence(state.currentSentenceIndex);
   }
   
   updateUI();
 }
 
-// Update UI elements
+// ==================== UI UPDATES ====================
+
 function updateUI() {
   updateFloatingControls();
   sendStatusUpdate();
@@ -451,13 +539,17 @@ function sendStatusUpdate() {
         totalSentences: state.sentences.length,
         provider: state.provider,
         voice: state.voice,
-        speed: state.speed
+        speed: state.speed,
+        audioState: state.audioState
       }
     });
-  } catch (e) {}
+  } catch (e) {
+    // Extension context may be invalid
+  }
 }
 
-// Click to start from selection
+// ==================== CLICK TO START ====================
+
 document.addEventListener('mouseup', (e) => {
   if (!state.isActive) return;
   if (e.target.closest('#lexiflow-floating-controls')) return;
@@ -479,6 +571,7 @@ document.addEventListener('mouseup', (e) => {
   }
   
   if (matchIdx !== -1) {
+    console.log('[LexiFlow] Click navigation to sentence:', matchIdx + 1);
     stopAllAudio();
     state.currentSentenceIndex = matchIdx;
     
@@ -491,7 +584,8 @@ document.addEventListener('mouseup', (e) => {
   }
 });
 
-// Message handler
+// ==================== MESSAGE HANDLER ====================
+
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   console.log('[LexiFlow] Message:', request.action);
   
@@ -536,12 +630,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       break;
       
     case 'updateVoice':
-      updateVoice(request.voice, request.provider);
+      updateVoice(request.voice, request.provider, request.immediate || false);
       sendResponse({ success: true });
       break;
       
     case 'changeProvider':
-      updateVoice(state.voice, request.provider);
+      updateVoice(state.voice, request.provider, true);
       sendResponse({ success: true });
       break;
       
@@ -554,7 +648,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         totalSentences: state.sentences.length,
         provider: state.provider,
         voice: state.voice,
-        speed: state.speed
+        speed: state.speed,
+        audioState: state.audioState
       });
       break;
       
@@ -594,7 +689,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   return true;
 });
 
-// Floating Controls
+// ==================== FLOATING CONTROLS ====================
+
 function createFloatingControls() {
   const el = document.createElement('div');
   el.id = 'lexiflow-floating-controls';
@@ -666,14 +762,17 @@ function updateFloatingControls() {
   
   if (playIcon) {
     if (state.isPlaying && !state.isPaused) {
+      // Show pause icon
       playIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
     } else {
+      // Show play icon
       playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
     }
   }
 }
 
-// Styles
+// ==================== STYLES ====================
+
 const style = document.createElement('style');
 style.textContent = `
   #lexiflow-floating-controls {
@@ -748,15 +847,8 @@ style.textContent = `
     height: 20px !important;
   }
   #lf-close:hover {
-    background: rgba(220, 38, 38, 0.5) !important;
-    border-color: rgba(220, 38, 38, 0.7) !important;
+    background: rgba(239, 68, 68, 0.3) !important;
+    border-color: rgba(239, 68, 68, 0.5) !important;
   }
 `;
 document.head.appendChild(style);
-
-console.log('[LexiFlow] Ready - Click any text to start reading from there');
-
-// Notify background
-chrome.runtime.sendMessage({ action: 'contentScriptLoaded', url: window.location.href }, () => {
-  if (chrome.runtime.lastError) {}
-});
