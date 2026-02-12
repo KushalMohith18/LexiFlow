@@ -212,14 +212,18 @@ async function navigate(direction) {
 }
 
 function updateSpeed(e) {
-  const speed = e.target.value;
-  document.getElementById('speedValue').textContent = speed + 'x';
+  const speed = parseFloat(e.target.value);
+  document.getElementById('speedValue').textContent = speed.toFixed(1) + 'x';
   chrome.storage.sync.set({ speed: speed });
   
-  // Update active reading if any
+  // Update active reading IMMEDIATELY
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (tab) {
-      chrome.tabs.sendMessage(tab.id, { action: 'updateSpeed', speed: parseFloat(speed) }, () => {
+      chrome.tabs.sendMessage(tab.id, { 
+        action: 'updateSpeed', 
+        speed: speed,
+        immediate: true  // Flag for immediate restart
+      }, () => {
         if (chrome.runtime.lastError) {
           // Ignore error if content script not loaded
         }
@@ -231,6 +235,22 @@ function updateSpeed(e) {
 function updateVoice(e) {
   const voice = e.target.value;
   chrome.storage.sync.set({ voice: voice });
+  
+  // Update active reading IMMEDIATELY with new voice
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (tab) {
+      chrome.tabs.sendMessage(tab.id, { 
+        action: 'updateVoice',
+        voice: voice,
+        provider: currentProvider,
+        immediate: true  // Flag for immediate restart
+      }, () => {
+        if (chrome.runtime.lastError) {
+          // Ignore error
+        }
+      });
+    }
+  });
 }
 
 function updateStatus(status) {
