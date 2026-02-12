@@ -1,26 +1,35 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Puter TTS Test - LexiFlow</title>
+    <title>LexiFlow TTS Test</title>
     <style>
+        * { box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            max-width: 800px;
+            max-width: 900px;
             margin: 0 auto;
-            padding: 40px;
-            background: #1a1a1a;
+            padding: 40px 20px;
+            background: #0f0f0f;
             color: #fff;
         }
         h1 {
             background: linear-gradient(135deg, #6D28D9, #00F0FF);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
         }
+        .subtitle { color: #888; margin-bottom: 30px; }
         .test-section {
-            background: #2a2a2a;
+            background: #1a1a1a;
+            border: 1px solid #333;
             border-radius: 12px;
-            padding: 20px;
+            padding: 24px;
             margin: 20px 0;
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #00F0FF;
+            font-size: 18px;
         }
         button {
             background: #6D28D9;
@@ -31,70 +40,183 @@
             cursor: pointer;
             font-size: 14px;
             margin: 5px;
+            transition: all 0.2s;
         }
-        button:hover {
-            background: #7D38E9;
+        button:hover { background: #7D38E9; transform: translateY(-1px); }
+        button:active { transform: translateY(0); }
+        button.secondary {
+            background: #333;
+            border: 1px solid #444;
         }
+        button.secondary:hover { background: #444; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         #result {
             margin-top: 20px;
             padding: 15px;
-            background: #1a1a1a;
+            background: #0a0a0a;
+            border: 1px solid #222;
             border-radius: 8px;
-            font-family: monospace;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
             white-space: pre-wrap;
-            min-height: 100px;
+            max-height: 300px;
+            overflow-y: auto;
         }
         .success { color: #4ade80; }
         .error { color: #f87171; }
         .info { color: #60a5fa; }
-        select {
-            background: #1a1a1a;
-            border: 1px solid #3a3a3a;
+        .warn { color: #fbbf24; }
+        select, input[type="range"] {
+            background: #0a0a0a;
+            border: 1px solid #333;
             color: white;
             padding: 10px;
             border-radius: 8px;
             margin: 5px;
         }
+        select { min-width: 200px; }
+        input[type="range"] { width: 200px; vertical-align: middle; }
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }
+        label { color: #aaa; min-width: 80px; }
+        .speed-value { color: #6D28D9; font-weight: bold; min-width: 50px; }
+        textarea {
+            width: 100%;
+            background: #0a0a0a;
+            border: 1px solid #333;
+            color: white;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            resize: vertical;
+            min-height: 80px;
+        }
     </style>
 </head>
 <body>
-    <h1>LexiFlow - Puter TTS Test</h1>
+    <h1>LexiFlow TTS Test Suite</h1>
+    <p class="subtitle">Test all TTS providers and voices before using the extension</p>
     
+    <!-- Test 1: Puter TTS -->
     <div class="test-section">
-        <h2>Test Puter.js TTS</h2>
-        <p>This tests the Puter.js library for high-quality text-to-speech.</p>
+        <h2>1. Puter TTS (High Quality Neural Voices)</h2>
+        <p>Tests the Puter.js AI TTS API with neural voices.</p>
         
-        <div style="margin: 15px 0;">
-            <label>Voice: </label>
-            <select id="voiceSelect">
-                <option value="en-US-Wavenet-D">Dylan (US Neural) ⭐</option>
-                <option value="en-US-Wavenet-C">Clara (US Neural) ⭐</option>
-                <option value="en-US-Wavenet-A">Aria (US Neural)</option>
-                <option value="en-US-Wavenet-B">Blake (US Neural)</option>
-                <option value="en-GB-Wavenet-A">Eleanor (UK Neural)</option>
-                <option value="en-GB-Wavenet-B">Henry (UK Neural)</option>
-                <option value="en-US-Standard-D">David (US Standard)</option>
-                <option value="en-US-Standard-C">Chloe (US Standard)</option>
+        <div class="control-row">
+            <label>Voice:</label>
+            <select id="puterVoice">
+                <optgroup label="🇺🇸 US English">
+                    <option value="Joanna" selected>Joanna (Female)</option>
+                    <option value="Matthew">Matthew (Male)</option>
+                    <option value="Ivy">Ivy (Female)</option>
+                    <option value="Joey">Joey (Male)</option>
+                    <option value="Kendra">Kendra (Female)</option>
+                    <option value="Kimberly">Kimberly (Female)</option>
+                    <option value="Salli">Salli (Female)</option>
+                    <option value="Kevin">Kevin (Male)</option>
+                    <option value="Ruth">Ruth (Female)</option>
+                    <option value="Stephen">Stephen (Male)</option>
+                </optgroup>
+                <optgroup label="🇬🇧 UK English">
+                    <option value="Amy">Amy (Female)</option>
+                    <option value="Brian">Brian (Male)</option>
+                    <option value="Emma">Emma (Female)</option>
+                    <option value="Arthur">Arthur (Male)</option>
+                </optgroup>
+                <optgroup label="🇦🇺 Australian">
+                    <option value="Olivia">Olivia (Female)</option>
+                </optgroup>
             </select>
         </div>
         
-        <button onclick="testPuterTTS()">Test Puter TTS</button>
-        <button onclick="testBrowserTTS()">Test Browser TTS (Fallback)</button>
-        <button onclick="clearResults()">Clear</button>
+        <div class="control-row">
+            <label>Speed:</label>
+            <input type="range" id="puterSpeed" min="0.5" max="2" step="0.1" value="1">
+            <span class="speed-value" id="puterSpeedValue">1.0x</span>
+        </div>
         
-        <div id="result">Click a button to test...</div>
+        <div class="control-row">
+            <label>Text:</label>
+        </div>
+        <textarea id="puterText">Welcome to LexiFlow. This is a test of the high-quality neural voice synthesis. The voice should sound natural and clear, perfect for reading technical documentation.</textarea>
+        
+        <div style="margin-top: 15px;">
+            <button onclick="testPuterTTS()">▶ Test Puter TTS</button>
+            <button class="secondary" onclick="stopPuterAudio()">⏹ Stop</button>
+        </div>
     </div>
     
+    <!-- Test 2: Browser TTS -->
     <div class="test-section">
-        <h2>Sample Documentation</h2>
-        <p>This is sample text that would be read by LexiFlow. The extension splits content into sentences and reads them one by one with highlighting.</p>
-        <p>Each sentence is highlighted as it's spoken, and you can click anywhere to jump to that sentence. The view auto-scrolls to keep the current sentence at eye level.</p>
-        <p>Voice options include high-quality neural voices from Puter.js, or offline browser voices as a fallback.</p>
+        <h2>2. Browser TTS (Offline Fallback)</h2>
+        <p>Tests the browser's built-in Web Speech API.</p>
+        
+        <div class="control-row">
+            <label>Voice:</label>
+            <select id="browserVoice">
+                <option value="">Loading voices...</option>
+            </select>
+        </div>
+        
+        <div class="control-row">
+            <label>Speed:</label>
+            <input type="range" id="browserSpeed" min="0.5" max="2" step="0.1" value="1">
+            <span class="speed-value" id="browserSpeedValue">1.0x</span>
+        </div>
+        
+        <div class="control-row">
+            <label>Text:</label>
+        </div>
+        <textarea id="browserText">This is the browser's built-in text to speech. Quality varies by browser and operating system, but it works offline.</textarea>
+        
+        <div style="margin-top: 15px;">
+            <button onclick="testBrowserTTS()">▶ Test Browser TTS</button>
+            <button class="secondary" onclick="speechSynthesis.cancel()">⏹ Stop</button>
+        </div>
+    </div>
+    
+    <!-- Test 3: Real-time Speed Change -->
+    <div class="test-section">
+        <h2>3. Real-time Speed Control Test</h2>
+        <p>Tests changing playback speed without restarting.</p>
+        
+        <div class="control-row">
+            <label>Speed:</label>
+            <input type="range" id="realtimeSpeed" min="0.5" max="2" step="0.1" value="1" oninput="changeRealtimeSpeed(this.value)">
+            <span class="speed-value" id="realtimeSpeedValue">1.0x</span>
+        </div>
+        
+        <div style="margin-top: 15px;">
+            <button onclick="testRealtimeSpeed()">▶ Start (then adjust speed)</button>
+            <button class="secondary" onclick="stopRealtimeTest()">⏹ Stop</button>
+        </div>
+    </div>
+    
+    <!-- Results -->
+    <div class="test-section">
+        <h2>Test Log</h2>
+        <button class="secondary" onclick="clearResults()">Clear Log</button>
+        <div id="result">Ready for testing. Click a test button above.</div>
     </div>
 
     <script src="https://js.puter.com/v2/"></script>
     <script>
         const result = document.getElementById('result');
+        let currentPuterAudio = null;
+        let realtimeAudio = null;
+        
+        // Speed slider handlers
+        document.getElementById('puterSpeed').oninput = function() {
+            document.getElementById('puterSpeedValue').textContent = this.value + 'x';
+        };
+        document.getElementById('browserSpeed').oninput = function() {
+            document.getElementById('browserSpeedValue').textContent = this.value + 'x';
+        };
         
         function log(message, type = 'info') {
             const timestamp = new Date().toLocaleTimeString();
@@ -103,34 +225,102 @@
         }
         
         function clearResults() {
-            result.innerHTML = '';
+            result.innerHTML = 'Log cleared.\n';
         }
         
+        // Load browser voices
+        function loadBrowserVoices() {
+            const voices = speechSynthesis.getVoices();
+            const select = document.getElementById('browserVoice');
+            
+            if (voices.length === 0) return;
+            
+            select.innerHTML = '';
+            
+            const englishVoices = voices.filter(v => v.lang.startsWith('en'));
+            const otherVoices = voices.filter(v => !v.lang.startsWith('en'));
+            
+            if (englishVoices.length > 0) {
+                const optGroup = document.createElement('optgroup');
+                optGroup.label = 'English';
+                englishVoices.forEach(v => {
+                    const option = document.createElement('option');
+                    option.value = voices.indexOf(v);
+                    option.textContent = v.name;
+                    optGroup.appendChild(option);
+                });
+                select.appendChild(optGroup);
+            }
+            
+            if (otherVoices.length > 0) {
+                const optGroup = document.createElement('optgroup');
+                optGroup.label = 'Other Languages';
+                otherVoices.slice(0, 10).forEach(v => {
+                    const option = document.createElement('option');
+                    option.value = voices.indexOf(v);
+                    option.textContent = `${v.name} (${v.lang})`;
+                    optGroup.appendChild(option);
+                });
+                select.appendChild(optGroup);
+            }
+            
+            log(`Loaded ${voices.length} browser voices`, 'success');
+        }
+        
+        // Initialize
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = loadBrowserVoices;
+        }
+        loadBrowserVoices();
+        
+        // Test Puter TTS
         async function testPuterTTS() {
             log('Testing Puter TTS...', 'info');
             
             try {
-                // Check if puter is loaded
-                if (typeof puter === 'undefined') {
-                    log('ERROR: Puter.js not loaded!', 'error');
+                if (typeof puter === 'undefined' || !puter.ai || !puter.ai.txt2speech) {
+                    log('ERROR: Puter.js not loaded or TTS not available!', 'error');
+                    log('Make sure you have internet connection.', 'warn');
                     return;
                 }
                 
-                log('✓ Puter.js library loaded', 'success');
+                log('✓ Puter.js library available', 'success');
                 
-                const voice = document.getElementById('voiceSelect').value;
-                const testText = "Hello! This is a test of the Puter TTS system. The voice quality should be clear and natural, perfect for reading documentation.";
+                const voice = document.getElementById('puterVoice').value;
+                const speed = parseFloat(document.getElementById('puterSpeed').value);
+                const text = document.getElementById('puterText').value;
                 
-                log(`Speaking with voice: ${voice}`, 'info');
-                log(`Text: "${testText}"`, 'info');
+                log(`Voice: ${voice}, Speed: ${speed}x`, 'info');
+                log(`Text: "${text.substring(0, 50)}..."`, 'info');
+                log('Generating audio...', 'info');
                 
-                // Use puter.say for direct speech
-                await puter.say(testText, {
+                // Stop previous audio
+                stopPuterAudio();
+                
+                // Call Puter TTS API
+                const audio = await puter.ai.txt2speech(text, {
                     voice: voice,
-                    rate: 1.0
+                    engine: 'neural'
                 });
                 
-                log('✓ Speech completed successfully!', 'success');
+                currentPuterAudio = audio;
+                
+                log('✓ Audio generated successfully', 'success');
+                
+                // Set playback rate
+                audio.playbackRate = speed;
+                
+                audio.onended = () => {
+                    log('✓ Playback completed', 'success');
+                };
+                
+                audio.onerror = (e) => {
+                    log(`Audio error: ${e.type}`, 'error');
+                };
+                
+                // Play
+                await audio.play();
+                log('▶ Playing audio...', 'info');
                 
             } catch (error) {
                 log(`ERROR: ${error.message}`, 'error');
@@ -138,40 +328,38 @@
             }
         }
         
-        async function testBrowserTTS() {
-            log('Testing Browser TTS (fallback)...', 'info');
+        function stopPuterAudio() {
+            if (currentPuterAudio) {
+                currentPuterAudio.pause();
+                currentPuterAudio.currentTime = 0;
+                currentPuterAudio = null;
+                log('Stopped Puter audio', 'info');
+            }
+        }
+        
+        // Test Browser TTS
+        function testBrowserTTS() {
+            log('Testing Browser TTS...', 'info');
             
             try {
-                const testText = "This is the browser's built-in text to speech. It works offline but may have lower voice quality.";
-                
-                // Cancel any ongoing speech
                 speechSynthesis.cancel();
                 
-                const utterance = new SpeechSynthesisUtterance(testText);
-                utterance.rate = 1.0;
+                const voiceIndex = parseInt(document.getElementById('browserVoice').value);
+                const speed = parseFloat(document.getElementById('browserSpeed').value);
+                const text = document.getElementById('browserText').value;
                 
-                // Get best available voice
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.rate = speed;
+                
                 const voices = speechSynthesis.getVoices();
-                log(`Available browser voices: ${voices.length}`, 'info');
-                
-                // Find a good English voice
-                const englishVoice = voices.find(v => 
-                    v.lang.startsWith('en') && 
-                    (v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('enhanced'))
-                ) || voices.find(v => v.lang.startsWith('en')) || voices[0];
-                
-                if (englishVoice) {
-                    utterance.voice = englishVoice;
-                    log(`Using voice: ${englishVoice.name}`, 'info');
+                if (voices[voiceIndex]) {
+                    utterance.voice = voices[voiceIndex];
+                    log(`Voice: ${voices[voiceIndex].name}, Speed: ${speed}x`, 'info');
                 }
                 
-                utterance.onend = () => {
-                    log('✓ Browser TTS completed!', 'success');
-                };
-                
-                utterance.onerror = (e) => {
-                    log(`ERROR: ${e.error}`, 'error');
-                };
+                utterance.onstart = () => log('▶ Playing...', 'info');
+                utterance.onend = () => log('✓ Playback completed', 'success');
+                utterance.onerror = (e) => log(`Error: ${e.error}`, 'error');
                 
                 speechSynthesis.speak(utterance);
                 
@@ -180,21 +368,77 @@
             }
         }
         
-        // Load voices when ready
-        if (speechSynthesis.onvoiceschanged !== undefined) {
-            speechSynthesis.onvoiceschanged = () => {
-                log(`Browser voices loaded: ${speechSynthesis.getVoices().length}`, 'info');
-            };
+        // Test real-time speed change
+        async function testRealtimeSpeed() {
+            log('Testing real-time speed control...', 'info');
+            log('Adjust the speed slider while audio plays!', 'warn');
+            
+            try {
+                stopRealtimeTest();
+                
+                const longText = "This is a longer piece of text to test real-time speed adjustments. As I speak, you should be able to change the playback speed using the slider above. The change should happen immediately without restarting the audio. This demonstrates how LexiFlow handles speed changes during playback. Keep adjusting the slider to see the effect.";
+                
+                if (typeof puter !== 'undefined' && puter.ai && puter.ai.txt2speech) {
+                    log('Using Puter TTS for real-time test', 'info');
+                    
+                    const audio = await puter.ai.txt2speech(longText, {
+                        voice: 'Joanna',
+                        engine: 'neural'
+                    });
+                    
+                    realtimeAudio = audio;
+                    audio.playbackRate = parseFloat(document.getElementById('realtimeSpeed').value);
+                    
+                    audio.onended = () => {
+                        log('✓ Real-time test completed', 'success');
+                        realtimeAudio = null;
+                    };
+                    
+                    await audio.play();
+                    log('▶ Playing - adjust speed now!', 'info');
+                } else {
+                    log('Puter TTS not available, using browser TTS', 'warn');
+                    log('Note: Browser TTS cannot change speed in real-time', 'warn');
+                    
+                    const utterance = new SpeechSynthesisUtterance(longText);
+                    utterance.rate = parseFloat(document.getElementById('realtimeSpeed').value);
+                    utterance.onend = () => log('✓ Test completed', 'success');
+                    speechSynthesis.speak(utterance);
+                }
+                
+            } catch (error) {
+                log(`ERROR: ${error.message}`, 'error');
+            }
         }
         
-        // Initial check
-        window.addEventListener('load', () => {
-            log('Page loaded. Ready for testing.', 'info');
-            if (typeof puter !== 'undefined') {
-                log('✓ Puter.js detected', 'success');
-            } else {
-                log('⚠ Puter.js not detected yet (may still be loading)', 'info');
+        function changeRealtimeSpeed(value) {
+            document.getElementById('realtimeSpeedValue').textContent = value + 'x';
+            
+            if (realtimeAudio) {
+                realtimeAudio.playbackRate = parseFloat(value);
+                log(`Speed changed to ${value}x (real-time)`, 'info');
             }
+        }
+        
+        function stopRealtimeTest() {
+            if (realtimeAudio) {
+                realtimeAudio.pause();
+                realtimeAudio = null;
+            }
+            speechSynthesis.cancel();
+        }
+        
+        // Initial log
+        window.addEventListener('load', () => {
+            log('Test page loaded', 'info');
+            
+            setTimeout(() => {
+                if (typeof puter !== 'undefined' && puter.ai) {
+                    log('✓ Puter.js loaded and ready', 'success');
+                } else {
+                    log('⚠ Puter.js still loading...', 'warn');
+                }
+            }, 1000);
         });
     </script>
 </body>
