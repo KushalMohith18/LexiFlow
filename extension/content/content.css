@@ -1,0 +1,4 @@
+/* Global styles for LexiFlow highlighting */
+#lexiflow-highlight {
+  transition: all 0.3s ease-in-out;
+}
