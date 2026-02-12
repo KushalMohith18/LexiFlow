@@ -3,34 +3,33 @@ let currentSentenceIndex = 0;
 let totalSentences = 0;
 let currentProvider = 'puter';
 
-// Puter TTS voice options (high quality cloud voices)
+// Puter TTS voice options (AWS Polly neural voices via Puter.js)
 const puterVoices = [
-  { id: 'en-US-Wavenet-D', name: 'Dylan (US Neural)', locale: 'en-US', quality: 'high' },
-  { id: 'en-US-Wavenet-C', name: 'Clara (US Neural)', locale: 'en-US', quality: 'high' },
-  { id: 'en-US-Wavenet-A', name: 'Aria (US Neural)', locale: 'en-US', quality: 'high' },
-  { id: 'en-US-Wavenet-B', name: 'Blake (US Neural)', locale: 'en-US', quality: 'high' },
-  { id: 'en-GB-Wavenet-A', name: 'Eleanor (UK Neural)', locale: 'en-GB', quality: 'high' },
-  { id: 'en-GB-Wavenet-B', name: 'Henry (UK Neural)', locale: 'en-GB', quality: 'high' },
-  { id: 'en-US-Standard-D', name: 'David (US Standard)', locale: 'en-US', quality: 'standard' },
-  { id: 'en-US-Standard-C', name: 'Chloe (US Standard)', locale: 'en-US', quality: 'standard' },
-  { id: 'en-US-Standard-A', name: 'Amy (US Standard)', locale: 'en-US', quality: 'standard' },
-  { id: 'en-US-Standard-B', name: 'Brian (US Standard)', locale: 'en-US', quality: 'standard' },
-  { id: 'en-GB-Standard-A', name: 'Emma (UK Standard)', locale: 'en-GB', quality: 'standard' },
-  { id: 'en-GB-Standard-B', name: 'Harry (UK Standard)', locale: 'en-GB', quality: 'standard' },
-  { id: 'en-AU-Standard-A', name: 'Olivia (AU Standard)', locale: 'en-AU', quality: 'standard' },
-  { id: 'en-AU-Standard-B', name: 'Jack (AU Standard)', locale: 'en-AU', quality: 'standard' },
+  { id: 'Joanna', name: 'Joanna (US Female)', locale: 'en-US' },
+  { id: 'Matthew', name: 'Matthew (US Male)', locale: 'en-US' },
+  { id: 'Ivy', name: 'Ivy (US Female)', locale: 'en-US' },
+  { id: 'Joey', name: 'Joey (US Male)', locale: 'en-US' },
+  { id: 'Kendra', name: 'Kendra (US Female)', locale: 'en-US' },
+  { id: 'Kimberly', name: 'Kimberly (US Female)', locale: 'en-US' },
+  { id: 'Salli', name: 'Salli (US Female)', locale: 'en-US' },
+  { id: 'Kevin', name: 'Kevin (US Male)', locale: 'en-US' },
+  { id: 'Ruth', name: 'Ruth (US Female)', locale: 'en-US' },
+  { id: 'Stephen', name: 'Stephen (US Male)', locale: 'en-US' },
+  { id: 'Amy', name: 'Amy (UK Female)', locale: 'en-GB' },
+  { id: 'Brian', name: 'Brian (UK Male)', locale: 'en-GB' },
+  { id: 'Emma', name: 'Emma (UK Female)', locale: 'en-GB' },
+  { id: 'Arthur', name: 'Arthur (UK Male)', locale: 'en-GB' },
+  { id: 'Olivia', name: 'Olivia (AU Female)', locale: 'en-AU' },
 ];
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
-  // Get current tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
-  // Check if tab URL is valid for content scripts
+  // Check if tab URL is valid
   if (!tab || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:')) {
-    document.getElementById('statusText').textContent = 'Cannot run on this page';
-    document.getElementById('playBtn').disabled = true;
     document.getElementById('statusText').innerHTML = '<span style="color: #f87171;">⚠ Cannot run on browser internal pages</span>';
+    document.getElementById('playBtn').disabled = true;
     return;
   }
   
@@ -44,7 +43,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       currentProvider = result.ttsProvider;
       document.getElementById('ttsProvider').value = result.ttsProvider;
     }
-    // Load voice after settings are loaded
     loadVoices().then(() => {
       if (result.voice) {
         document.getElementById('voiceSelect').value = result.voice;
@@ -52,7 +50,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   });
 
-  // Check if reading is active on this page
+  // Check reading status
   try {
     chrome.tabs.sendMessage(tab.id, { action: 'getStatus' }, (response) => {
       if (chrome.runtime.lastError) {
@@ -83,64 +81,72 @@ async function loadVoices() {
   voiceSelect.innerHTML = '<option value="">Loading voices...</option>';
   
   if (provider === 'puter') {
-    // Load Puter TTS voices (high quality)
     voiceSelect.innerHTML = '';
     
-    // Add high-quality voices first
-    const highQuality = puterVoices.filter(v => v.quality === 'high');
-    const standard = puterVoices.filter(v => v.quality === 'standard');
+    // US voices
+    const usVoices = puterVoices.filter(v => v.locale === 'en-US');
+    const ukVoices = puterVoices.filter(v => v.locale === 'en-GB');
+    const auVoices = puterVoices.filter(v => v.locale === 'en-AU');
     
-    if (highQuality.length > 0) {
-      const optGroup1 = document.createElement('optgroup');
-      optGroup1.label = '⭐ High Quality (Neural)';
-      highQuality.forEach((voice, index) => {
+    if (usVoices.length > 0) {
+      const optGroupUS = document.createElement('optgroup');
+      optGroupUS.label = '🇺🇸 US English (Neural)';
+      usVoices.forEach((voice, index) => {
         const option = document.createElement('option');
         option.value = voice.id;
-        option.textContent = `${voice.name} (${voice.locale})`;
+        option.textContent = voice.name;
         if (index === 0) option.selected = true;
-        optGroup1.appendChild(option);
+        optGroupUS.appendChild(option);
       });
-      voiceSelect.appendChild(optGroup1);
+      voiceSelect.appendChild(optGroupUS);
     }
     
-    if (standard.length > 0) {
-      const optGroup2 = document.createElement('optgroup');
-      optGroup2.label = 'Standard Quality';
-      standard.forEach((voice) => {
+    if (ukVoices.length > 0) {
+      const optGroupUK = document.createElement('optgroup');
+      optGroupUK.label = '🇬🇧 UK English (Neural)';
+      ukVoices.forEach((voice) => {
         const option = document.createElement('option');
         option.value = voice.id;
-        option.textContent = `${voice.name} (${voice.locale})`;
-        optGroup2.appendChild(option);
+        option.textContent = voice.name;
+        optGroupUK.appendChild(option);
       });
-      voiceSelect.appendChild(optGroup2);
+      voiceSelect.appendChild(optGroupUK);
+    }
+    
+    if (auVoices.length > 0) {
+      const optGroupAU = document.createElement('optgroup');
+      optGroupAU.label = '🇦🇺 AU English (Neural)';
+      auVoices.forEach((voice) => {
+        const option = document.createElement('option');
+        option.value = voice.id;
+        option.textContent = voice.name;
+        optGroupAU.appendChild(option);
+      });
+      voiceSelect.appendChild(optGroupAU);
     }
     
     console.log('[LexiFlow] Loaded', puterVoices.length, 'Puter TTS voices');
     
   } else {
-    // Load Browser TTS voices
+    // Browser TTS voices
     let voices = speechSynthesis.getVoices();
     
-    // If voices not ready, wait for them
     if (voices.length === 0) {
       await new Promise(resolve => {
         speechSynthesis.addEventListener('voiceschanged', () => {
           voices = speechSynthesis.getVoices();
           resolve();
         }, { once: true });
-        // Timeout fallback
         setTimeout(resolve, 500);
       });
       voices = speechSynthesis.getVoices();
     }
     
     if (voices.length > 0) {
-      // Sort voices by quality
       const sortedVoices = voices.sort((a, b) => {
         const qualityKeywords = ['enhanced', 'premium', 'natural', 'neural', 'google', 'microsoft'];
         const aScore = qualityKeywords.some(k => a.name.toLowerCase().includes(k)) ? 1 : 0;
         const bScore = qualityKeywords.some(k => b.name.toLowerCase().includes(k)) ? 1 : 0;
-        
         if (aScore !== bScore) return bScore - aScore;
         if (a.lang.startsWith('en') && !b.lang.startsWith('en')) return -1;
         if (!a.lang.startsWith('en') && b.lang.startsWith('en')) return 1;
@@ -149,16 +155,16 @@ async function loadVoices() {
       
       voiceSelect.innerHTML = '';
       
-      // Group English voices
       const englishVoices = sortedVoices.filter(v => v.lang.startsWith('en'));
       const otherVoices = sortedVoices.filter(v => !v.lang.startsWith('en'));
       
       if (englishVoices.length > 0) {
         const optGroupEn = document.createElement('optgroup');
         optGroupEn.label = 'English Voices';
-        englishVoices.forEach((voice, index) => {
+        englishVoices.forEach((voice) => {
           const option = document.createElement('option');
-          option.value = `browser-${sortedVoices.indexOf(voice)}`;
+          const idx = sortedVoices.indexOf(voice);
+          option.value = `browser-${idx}`;
           const isRecommended = ['enhanced', 'premium', 'natural', 'neural'].some(k => 
             voice.name.toLowerCase().includes(k)
           );
@@ -171,9 +177,10 @@ async function loadVoices() {
       if (otherVoices.length > 0) {
         const optGroupOther = document.createElement('optgroup');
         optGroupOther.label = 'Other Languages';
-        otherVoices.slice(0, 20).forEach((voice) => {
+        otherVoices.slice(0, 15).forEach((voice) => {
           const option = document.createElement('option');
-          option.value = `browser-${sortedVoices.indexOf(voice)}`;
+          const idx = sortedVoices.indexOf(voice);
+          option.value = `browser-${idx}`;
           option.textContent = `${voice.name} (${voice.lang})`;
           optGroupOther.appendChild(option);
         });
@@ -192,11 +199,6 @@ async function changeTTSProvider(e) {
   chrome.storage.sync.set({ ttsProvider: currentProvider });
   await loadVoices();
   
-  // Update status text
-  const providerName = currentProvider === 'puter' ? 'High-Quality TTS' : 'Browser TTS';
-  console.log('[LexiFlow] Switched to', providerName);
-  
-  // Notify content script to change provider
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (tab && tab.id) {
       chrome.tabs.sendMessage(tab.id, { 
@@ -204,7 +206,7 @@ async function changeTTSProvider(e) {
         provider: currentProvider
       }, () => {
         if (chrome.runtime.lastError) {
-          console.log('Could not change provider in content script');
+          console.log('Could not change provider');
         }
       });
     }
@@ -216,12 +218,11 @@ async function togglePlay() {
   const playBtn = document.getElementById('playBtn');
   
   if (!tab || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:')) {
-    alert('Cannot run on this page. Please navigate to a regular webpage.');
+    alert('Cannot run on this page. Navigate to a regular webpage.');
     return;
   }
   
   if (isPlaying) {
-    // Pause
     chrome.tabs.sendMessage(tab.id, { action: 'pause' }, (response) => {
       if (chrome.runtime.lastError) {
         console.error('Error:', chrome.runtime.lastError);
@@ -230,12 +231,11 @@ async function togglePlay() {
     playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Continue';
     isPlaying = false;
   } else {
-    // Play
     const speed = parseFloat(document.getElementById('speedSlider').value);
     const voice = document.getElementById('voiceSelect').value;
     const provider = document.getElementById('ttsProvider').value;
     
-    playBtn.innerHTML = '<svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg> Starting...';
+    playBtn.innerHTML = '<svg class="spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Starting...';
     
     chrome.tabs.sendMessage(tab.id, { 
       action: 'start',
@@ -246,7 +246,7 @@ async function togglePlay() {
       if (chrome.runtime.lastError) {
         console.error('Error starting:', chrome.runtime.lastError);
         playBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg> Start Reading';
-        alert('Failed to start reading. Please refresh the page and try again.');
+        alert('Failed to start. Please refresh the page and try again.');
         return;
       }
       if (response && response.success) {
@@ -275,16 +275,15 @@ function updateSpeed(e) {
   document.getElementById('speedValue').textContent = speed.toFixed(1) + 'x';
   chrome.storage.sync.set({ speed: speed });
   
-  // Update active reading IMMEDIATELY
+  // Send speed update - will apply in real-time without restarting
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (tab && tab.id) {
       chrome.tabs.sendMessage(tab.id, { 
         action: 'updateSpeed', 
-        speed: speed,
-        immediate: true
+        speed: speed
       }, () => {
         if (chrome.runtime.lastError) {
-          // Ignore error if content script not loaded
+          // Ignore
         }
       });
     }
@@ -295,17 +294,16 @@ function updateVoice(e) {
   const voice = e.target.value;
   chrome.storage.sync.set({ voice: voice });
   
-  // Update active reading IMMEDIATELY with new voice
+  // Send voice update - will apply on next sentence without restarting current
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     if (tab && tab.id) {
       chrome.tabs.sendMessage(tab.id, { 
         action: 'updateVoice',
         voice: voice,
-        provider: currentProvider,
-        immediate: true
+        provider: currentProvider
       }, () => {
         if (chrome.runtime.lastError) {
-          // Ignore error
+          // Ignore
         }
       });
     }
@@ -345,7 +343,7 @@ function updateStatus(status) {
   }
 }
 
-// Listen for updates from content script
+// Listen for status updates
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'statusUpdate') {
     updateStatus(request.status);
