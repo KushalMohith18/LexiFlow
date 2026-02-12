@@ -133,13 +133,20 @@ A floating widget appears on the page while reading:
 **Cause:** You're on a browser internal page (chrome://, about:, etc.)
 **Solution:** Navigate to a regular webpage first
 
+### Issue: TTS not working / No audio
+**Solutions:**
+1. Try switching TTS Provider in the popup (High Quality TTS vs Browser TTS)
+2. Check system volume is not muted
+3. Verify browser has audio permission
+4. Open test-puter-tts.html to test TTS directly:
+   ```
+   file:///app/extension/test-puter-tts.html
+   ```
+
 ### Issue: No voices in dropdown
 **Solution 1:** Wait a few seconds - voices load asynchronously
 **Solution 2:** Restart browser
-**Solution 3:** Test in console:
-```javascript
-speechSynthesis.getVoices()
-```
+**Solution 3:** Switch to "Browser TTS" provider for offline voices
 
 ### Issue: "Failed to start reading"
 **Possible causes:**
