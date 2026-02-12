@@ -389,13 +389,29 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 const style = document.createElement('style');
 style.textContent = `
   @keyframes lexiflow-pulse {
-    0% { opacity: 0; transform: translateX(-10px); }
-    100% { opacity: 1; transform: translateX(0); }
+    0% { 
+      opacity: 0; 
+      transform: translateX(-20px) scale(0.98);
+      filter: brightness(1);
+    }
+    50% {
+      filter: brightness(1.1);
+    }
+    100% { 
+      opacity: 1; 
+      transform: translateX(0) scale(1);
+      filter: brightness(1);
+    }
+  }
+  
+  #lexiflow-highlight {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 `;
 document.head.appendChild(style);
 
 console.log('[LexiFlow] Extension loaded and ready on:', window.location.hostname);
+console.log('[LexiFlow] 💡 Tip: Click or select any text to start reading from that sentence');
 
 // Notify background that content script is loaded
 chrome.runtime.sendMessage({ action: 'contentScriptLoaded', url: window.location.href }, () => {
