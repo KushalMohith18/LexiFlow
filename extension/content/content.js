@@ -6,9 +6,15 @@ let currentSentenceIndex = 0;
 let sentences = [];
 let utterance = null;
 let highlightedElement = null;
+let currentSpeed = 1.0;
+let currentVoice = 0;
+
+console.log('[LexiFlow] Content script loaded on:', window.location.href);
 
 // Extract text content from page
 function extractContent() {
+  console.log('[LexiFlow] Extracting content...');
+  
   // Get main content (try common selectors first)
   const mainSelectors = [
     'main',
@@ -19,17 +25,22 @@ function extractContent() {
     '#content',
     '.article-content',
     '.documentation',
-    '.docs-content'
+    '.docs-content',
+    '.markdown-body'
   ];
 
   let contentElement = null;
   for (const selector of mainSelectors) {
     contentElement = document.querySelector(selector);
-    if (contentElement) break;
+    if (contentElement) {
+      console.log('[LexiFlow] Found content in:', selector);
+      break;
+    }
   }
 
   // Fallback to body if no main content found
   if (!contentElement) {
+    console.log('[LexiFlow] Using body as fallback');
     contentElement = document.body;
   }
 
@@ -73,6 +84,7 @@ function extractContent() {
     .map(s => s.trim())
     .filter(s => s.length > 10 && s.split(' ').length > 3); // Filter out very short sentences
 
+  console.log('[LexiFlow] Extracted', sentences.length, 'sentences');
   return sentences;
 }
 
