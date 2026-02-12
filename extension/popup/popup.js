@@ -74,9 +74,18 @@ async function togglePlay() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const playBtn = document.getElementById('playBtn');
   
+  if (!tab || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+    alert('Cannot run on this page. Please navigate to a regular webpage.');
+    return;
+  }
+  
   if (isPlaying) {
     // Pause
-    chrome.tabs.sendMessage(tab.id, { action: 'pause' });
+    chrome.tabs.sendMessage(tab.id, { action: 'pause' }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Error:', chrome.runtime.lastError);
+      }
+    });
     playBtn.textContent = '▶ Continue';
     isPlaying = false;
   } else {
@@ -88,9 +97,17 @@ async function togglePlay() {
       action: 'start',
       speed: speed,
       voice: voice
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Error starting:', chrome.runtime.lastError);
+        alert('Failed to start reading. Please refresh the page and try again.');
+        return;
+      }
+      if (response && response.success) {
+        playBtn.textContent = '⏸ Pause';
+        isPlaying = true;
+      }
     });
-    playBtn.textContent = '⏸ Pause';
-    isPlaying = true;
   }
 }
 
