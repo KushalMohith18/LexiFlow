@@ -82,6 +82,17 @@
     .play-btn:hover {
       background: #7D38E9;
     }
+    .play-btn svg {
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+    .spin {
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
     .settings {
       background: #1a1a1a;
       border: 1px solid #2a2a2a;
