@@ -1,40 +1,41 @@
 /* Puter TTS Integration for LexiFlow */
-/* Uses Puter.js for high-quality, free, unlimited TTS */
+/* Uses puter.ai.txt2speech() for high-quality neural voices */
 
 class PuterTTS {
   constructor() {
     this.loaded = false;
     this.loadPromise = null;
-    this.audioContext = null;
     this.currentAudio = null;
+    this.onEndCallback = null;
     
-    // High-quality voice options
+    // Available voices for Puter TTS (AWS Polly neural voices)
     this.voices = [
-      { id: 'en-US-Standard-A', name: 'Amy (US Female)', locale: 'en-US', gender: 'Female' },
-      { id: 'en-US-Standard-B', name: 'Brian (US Male)', locale: 'en-US', gender: 'Male' },
-      { id: 'en-US-Standard-C', name: 'Chloe (US Female)', locale: 'en-US', gender: 'Female' },
-      { id: 'en-US-Standard-D', name: 'David (US Male)', locale: 'en-US', gender: 'Male' },
-      { id: 'en-US-Wavenet-A', name: 'Aria (US Neural)', locale: 'en-US', gender: 'Female' },
-      { id: 'en-US-Wavenet-B', name: 'Blake (US Neural)', locale: 'en-US', gender: 'Male' },
-      { id: 'en-US-Wavenet-C', name: 'Clara (US Neural)', locale: 'en-US', gender: 'Female' },
-      { id: 'en-US-Wavenet-D', name: 'Dylan (US Neural)', locale: 'en-US', gender: 'Male' },
-      { id: 'en-GB-Standard-A', name: 'Emma (UK Female)', locale: 'en-GB', gender: 'Female' },
-      { id: 'en-GB-Standard-B', name: 'Harry (UK Male)', locale: 'en-GB', gender: 'Male' },
-      { id: 'en-GB-Wavenet-A', name: 'Eleanor (UK Neural)', locale: 'en-GB', gender: 'Female' },
-      { id: 'en-GB-Wavenet-B', name: 'Henry (UK Neural)', locale: 'en-GB', gender: 'Male' },
-      { id: 'en-AU-Standard-A', name: 'Olivia (AU Female)', locale: 'en-AU', gender: 'Female' },
-      { id: 'en-AU-Standard-B', name: 'Jack (AU Male)', locale: 'en-AU', gender: 'Male' },
+      { id: 'Joanna', name: 'Joanna (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
+      { id: 'Matthew', name: 'Matthew (US Male)', locale: 'en-US', gender: 'Male', engine: 'neural' },
+      { id: 'Ivy', name: 'Ivy (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
+      { id: 'Joey', name: 'Joey (US Male)', locale: 'en-US', gender: 'Male', engine: 'neural' },
+      { id: 'Kendra', name: 'Kendra (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
+      { id: 'Kimberly', name: 'Kimberly (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
+      { id: 'Salli', name: 'Salli (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
+      { id: 'Kevin', name: 'Kevin (US Male)', locale: 'en-US', gender: 'Male', engine: 'neural' },
+      { id: 'Ruth', name: 'Ruth (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
+      { id: 'Stephen', name: 'Stephen (US Male)', locale: 'en-US', gender: 'Male', engine: 'neural' },
+      { id: 'Amy', name: 'Amy (UK Female)', locale: 'en-GB', gender: 'Female', engine: 'neural' },
+      { id: 'Brian', name: 'Brian (UK Male)', locale: 'en-GB', gender: 'Male', engine: 'neural' },
+      { id: 'Emma', name: 'Emma (UK Female)', locale: 'en-GB', gender: 'Female', engine: 'neural' },
+      { id: 'Arthur', name: 'Arthur (UK Male)', locale: 'en-GB', gender: 'Male', engine: 'neural' },
+      { id: 'Olivia', name: 'Olivia (AU Female)', locale: 'en-AU', gender: 'Female', engine: 'neural' },
     ];
   }
 
   // Load Puter.js library dynamically
   async load() {
-    if (this.loaded) return true;
+    if (this.loaded && typeof puter !== 'undefined') return true;
     if (this.loadPromise) return this.loadPromise;
     
     this.loadPromise = new Promise((resolve, reject) => {
       // Check if already loaded
-      if (typeof puter !== 'undefined') {
+      if (typeof puter !== 'undefined' && puter.ai && puter.ai.txt2speech) {
         this.loaded = true;
         console.log('[PuterTTS] Library already loaded');
         resolve(true);
@@ -46,9 +47,17 @@ class PuterTTS {
       script.async = true;
       
       script.onload = () => {
-        console.log('[PuterTTS] Library loaded successfully');
-        this.loaded = true;
-        resolve(true);
+        // Wait a bit for puter to initialize
+        const checkPuter = () => {
+          if (typeof puter !== 'undefined' && puter.ai) {
+            console.log('[PuterTTS] Library loaded successfully');
+            this.loaded = true;
+            resolve(true);
+          } else {
+            setTimeout(checkPuter, 100);
+          }
+        };
+        setTimeout(checkPuter, 100);
       };
       
       script.onerror = (error) => {
@@ -67,82 +76,49 @@ class PuterTTS {
     return this.voices;
   }
 
-  // Get recommended voices for documentation reading
-  getRecommendedVoices() {
-    // Prioritize neural/wavenet voices for better quality
-    return this.voices.filter(v => v.id.includes('Wavenet')).concat(
-      this.voices.filter(v => v.id.includes('Standard'))
-    );
-  }
-
-  // Synthesize text and return audio
-  async synthesize(text, voiceId = 'en-US-Wavenet-D', rate = 1.0) {
+  // Speak text and return audio element for control
+  async speak(text, voiceId = 'Joanna', rate = 1.0, onEnd = null) {
     try {
       await this.load();
       
-      if (typeof puter === 'undefined') {
-        throw new Error('Puter.js not available');
-      }
-      
-      console.log('[PuterTTS] Synthesizing with voice:', voiceId);
-      
-      // Use puter.tts.speak which returns audio data
-      // Note: puter.say() plays directly, we need more control
-      return new Promise((resolve, reject) => {
-        // Create a temporary audio element to capture the audio
-        const options = {
-          voice: voiceId,
-          rate: rate
-        };
-        
-        // puter.tts.speak returns a promise with audio data
-        if (puter.tts && puter.tts.speak) {
-          puter.tts.speak(text, options)
-            .then(audioData => {
-              resolve(audioData);
-            })
-            .catch(reject);
-        } else if (puter.say) {
-          // Fallback to puter.say which plays directly
-          // We'll need to handle this differently
-          puter.say(text, options);
-          resolve(null); // Indicate direct playback
-        } else {
-          reject(new Error('Puter TTS methods not available'));
-        }
-      });
-      
-    } catch (error) {
-      console.error('[PuterTTS] Synthesis error:', error);
-      throw error;
-    }
-  }
-
-  // Speak text directly using puter.say
-  async speak(text, voiceId = 'en-US-Wavenet-D', rate = 1.0) {
-    try {
-      await this.load();
-      
-      if (typeof puter === 'undefined') {
-        throw new Error('Puter.js not available');
+      if (typeof puter === 'undefined' || !puter.ai || !puter.ai.txt2speech) {
+        throw new Error('Puter.js TTS not available');
       }
       
       console.log('[PuterTTS] Speaking with voice:', voiceId, 'rate:', rate);
       
-      return new Promise((resolve, reject) => {
-        try {
-          // puter.say handles TTS directly
-          puter.say(text, {
-            voice: voiceId,
-            rate: rate
-          }).then(() => {
-            console.log('[PuterTTS] Speech completed');
-            resolve();
-          }).catch(reject);
-        } catch (e) {
-          reject(e);
-        }
+      // Stop any current audio
+      this.stop();
+      
+      // Call Puter TTS API
+      const audio = await puter.ai.txt2speech(text, {
+        voice: voiceId,
+        engine: 'neural'
       });
+      
+      this.currentAudio = audio;
+      this.onEndCallback = onEnd;
+      
+      // Set playback rate
+      audio.playbackRate = rate;
+      
+      // Set up event handlers
+      audio.onended = () => {
+        console.log('[PuterTTS] Audio ended');
+        if (this.onEndCallback) {
+          this.onEndCallback();
+        }
+      };
+      
+      audio.onerror = (e) => {
+        console.error('[PuterTTS] Audio error:', e);
+      };
+      
+      // Play the audio
+      await audio.play();
+      console.log('[PuterTTS] Playback started');
+      
+      return audio;
       
     } catch (error) {
       console.error('[PuterTTS] Speech error:', error);
@@ -150,27 +126,51 @@ class PuterTTS {
     }
   }
 
+  // Change playback rate without restarting (real-time)
+  setRate(rate) {
+    if (this.currentAudio) {
+      this.currentAudio.playbackRate = rate;
+      console.log('[PuterTTS] Rate changed to:', rate);
+    }
+  }
+
+  // Pause current audio
+  pause() {
+    if (this.currentAudio) {
+      this.currentAudio.pause();
+      console.log('[PuterTTS] Paused');
+    }
+  }
+
+  // Resume current audio
+  resume() {
+    if (this.currentAudio) {
+      this.currentAudio.play();
+      console.log('[PuterTTS] Resumed');
+    }
+  }
+
   // Stop current speech
   stop() {
     if (this.currentAudio) {
       this.currentAudio.pause();
+      this.currentAudio.currentTime = 0;
       this.currentAudio = null;
+      this.onEndCallback = null;
+      console.log('[PuterTTS] Stopped');
     }
-    // Also try to stop any puter speech
-    if (typeof puter !== 'undefined' && puter.tts && puter.tts.stop) {
-      try {
-        puter.tts.stop();
-      } catch (e) {
-        // Ignore
-      }
-    }
+  }
+
+  // Check if currently playing
+  isPlaying() {
+    return this.currentAudio && !this.currentAudio.paused;
   }
 
   // Check if Puter.js is available and working
   async isAvailable() {
     try {
       await this.load();
-      return typeof puter !== 'undefined';
+      return typeof puter !== 'undefined' && puter.ai && puter.ai.txt2speech;
     } catch {
       return false;
     }
