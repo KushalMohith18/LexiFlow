@@ -10,7 +10,7 @@
   ],
   "host_permissions": [
     "<all_urls>",
-    "https://speech.platform.bing.com/*"
+    "https://js.puter.com/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",
