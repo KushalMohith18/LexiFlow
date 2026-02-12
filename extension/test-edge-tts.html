@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Edge TTS Test</title>
+</head>
+<body>
+    <h1>Edge TTS Connection Test</h1>
+    <button onclick="testEdgeTTS()">Test Edge TTS</button>
+    <div id="result"></div>
+    
+    <script>
+    async function testEdgeTTS() {
+        const result = document.getElementById('result');
+        result.innerHTML = 'Testing...';
+        
+        try {
+            // Test 1: Fetch voices
+            result.innerHTML += '<br>Fetching voices...';
+            const voicesResponse = await fetch(
+                'https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4'
+            );
+            
+            if (!voicesResponse.ok) {
+                throw new Error('Voices fetch failed: ' + voicesResponse.status);
+            }
+            
+            const voices = await voicesResponse.json();
+            result.innerHTML += '<br>✓ Voices loaded: ' + voices.length;
+            
+            // Test 2: Synthesize
+            result.innerHTML += '<br>Testing synthesis...';
+            
+            const ssml = `
+                <speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US">
+                  <voice name="en-US-JennyNeural">
+                    <prosody rate="+0%" pitch="+0Hz">
+                      Testing Edge TTS synthesis
+                    </prosody>
+                  </voice>
+                </speak>
+            `.trim();
+            
+            const synthResponse = await fetch(
+                'https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4',
+                {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/ssml+xml',
+                        'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3',
+                    },
+                    body: ssml
+                }
+            );
+            
+            if (!synthResponse.ok) {
+                throw new Error('Synthesis failed: ' + synthResponse.status);
+            }
+            
+            const audioBlob = await synthResponse.blob();
+            result.innerHTML += '<br>✓ Audio generated: ' + audioBlob.size + ' bytes';
+            
+            // Play it
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = new Audio(audioUrl);
+            await audio.play();
+            
+            result.innerHTML += '<br>✓ Audio playing!';
+            
+        } catch (error) {
+            result.innerHTML += '<br>✗ ERROR: ' + error.message;
+            console.error('Edge TTS Error:', error);
+        }
+    }
+    </script>
+</body>
+</html>
