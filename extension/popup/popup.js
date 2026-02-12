@@ -288,23 +288,6 @@ function updateStatus(status) {
   }
 }
 
-async function openChat() {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  
-  // Extract page content
-  chrome.tabs.sendMessage(tab.id, { action: 'getContent' }, async (response) => {
-    if (chrome.runtime.lastError) {
-      console.error('Chat error:', chrome.runtime.lastError);
-      alert('Cannot access page content. Please refresh the page and try again.');
-      return;
-    }
-    if (response && response.content) {
-      // For now, just show an alert with preview
-      alert('Chat feature coming soon! Document has ' + response.content.split(' ').length + ' words.');
-    }
-  });
-}
-
 // Listen for updates from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'statusUpdate') {
