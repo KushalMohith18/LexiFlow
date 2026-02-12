@@ -328,4 +328,11 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
-console.log('LexiFlow extension loaded');
+console.log('[LexiFlow] Extension loaded and ready on:', window.location.hostname);
+
+// Notify background that content script is loaded
+chrome.runtime.sendMessage({ action: 'contentScriptLoaded', url: window.location.href }, () => {
+  if (chrome.runtime.lastError) {
+    // Ignore error if background script isn't listening
+  }
+});
