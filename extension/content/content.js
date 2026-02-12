@@ -243,9 +243,27 @@ function speakSentence(index, speed = 1.0, voiceIndex = 0) {
   utterance = new SpeechSynthesisUtterance(text);
   utterance.rate = speed;
   
+  // Get all voices and use the correct one based on sorted index from popup
   const voices = speechSynthesis.getVoices();
-  if (voices[voiceIndex]) {
-    utterance.voice = voices[voiceIndex];
+  
+  // Sort voices same way as popup does
+  const sortedVoices = voices.sort((a, b) => {
+    const qualityKeywords = ['enhanced', 'premium', 'natural', 'neural', 'google', 'microsoft'];
+    const aScore = qualityKeywords.some(k => a.name.toLowerCase().includes(k)) ? 1 : 0;
+    const bScore = qualityKeywords.some(k => b.name.toLowerCase().includes(k)) ? 1 : 0;
+    
+    if (aScore !== bScore) return bScore - aScore;
+    if (a.lang.startsWith('en') && !b.lang.startsWith('en')) return -1;
+    if (!a.lang.startsWith('en') && b.lang.startsWith('en')) return 1;
+    return a.name.localeCompare(b.name);
+  });
+  
+  if (sortedVoices[voiceIndex]) {
+    utterance.voice = sortedVoices[voiceIndex];
+    console.log('[LexiFlow] Using voice:', sortedVoices[voiceIndex].name);
+  } else if (sortedVoices[0]) {
+    utterance.voice = sortedVoices[0];
+    console.log('[LexiFlow] Using default voice:', sortedVoices[0].name);
   }
 
   utterance.onstart = () => {
