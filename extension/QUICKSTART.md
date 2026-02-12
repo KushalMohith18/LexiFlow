@@ -102,9 +102,17 @@ All files ready:
 - **⏸ Pause**: Pause reading (keeps position)
 - **⏮ Previous**: Go to previous sentence
 - **⏭ Next**: Go to next sentence
-- **Speed Slider**: Adjust reading speed (0.5x - 2x)
-- **Voice Dropdown**: Select different voice
-- **💬 Ask AI**: Chat feature (coming soon)
+- **TTS Provider**: Choose between High Quality TTS (Puter.js) or Browser TTS
+- **Voice**: Select from high-quality neural voices or browser voices
+- **Speed Slider**: Adjust reading speed (0.5x - 2.5x)
+
+### Floating Controls (On-Page)
+
+A floating widget appears on the page while reading:
+- **Play/Pause**: Quick toggle
+- **Previous/Next**: Navigate sentences
+- **Close**: Stop reading and hide controls
+- **Progress**: Shows current sentence number
 
 ### What You'll See
 
