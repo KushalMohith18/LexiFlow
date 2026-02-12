@@ -9,7 +9,8 @@
     "scripting"
   ],
   "host_permissions": [
-    "<all_urls>"
+    "<all_urls>",
+    "https://speech.platform.bing.com/*"
   ],
   "action": {
     "default_popup": "popup/popup.html",
