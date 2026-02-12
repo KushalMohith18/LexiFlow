@@ -156,6 +156,7 @@ function highlightSentence(sentenceText) {
   );
 
   let node;
+  let found = false;
   while (node = walker.nextNode()) {
     const text = node.textContent;
     // Check if this node contains our sentence (allowing for some variation)
@@ -176,23 +177,36 @@ function highlightSentence(sentenceText) {
         top: ${rect.top + window.scrollY}px;
         width: ${rect.width}px;
         min-height: ${rect.height}px;
-        background: linear-gradient(90deg, rgba(109, 40, 217, 0.2) 0%, rgba(0, 240, 255, 0.1) 100%);
-        border-left: 4px solid #6D28D9;
+        background: linear-gradient(90deg, rgba(109, 40, 217, 0.25) 0%, rgba(0, 240, 255, 0.15) 100%);
+        border-left: 5px solid #6D28D9;
         padding-left: 12px;
         pointer-events: none;
         z-index: 999999;
-        animation: lexiflow-pulse 0.5s ease-in-out;
-        box-shadow: 0 0 20px rgba(109, 40, 217, 0.3);
+        animation: lexiflow-pulse 0.4s ease-in-out;
+        box-shadow: 0 0 30px rgba(109, 40, 217, 0.4), inset 0 0 20px rgba(0, 240, 255, 0.1);
+        border-radius: 4px;
       `;
 
       document.body.appendChild(highlight);
       highlightedElement = highlight;
 
-      // Scroll into view
-      parent.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Improved scroll: Keep at eye level (1/3 from top for comfortable reading)
+      const viewportHeight = window.innerHeight;
+      const targetPosition = rect.top + window.scrollY - (viewportHeight / 3);
       
+      window.scrollTo({
+        top: Math.max(0, targetPosition),
+        behavior: 'smooth'
+      });
+      
+      console.log('[LexiFlow] Highlighted and scrolled to sentence');
+      found = true;
       break;
     }
+  }
+  
+  if (!found) {
+    console.log('[LexiFlow] Could not find sentence in DOM for highlighting');
   }
 }
 
