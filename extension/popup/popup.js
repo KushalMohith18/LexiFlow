@@ -113,7 +113,11 @@ async function togglePlay() {
 
 async function navigate(direction) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  chrome.tabs.sendMessage(tab.id, { action: direction });
+  chrome.tabs.sendMessage(tab.id, { action: direction }, (response) => {
+    if (chrome.runtime.lastError) {
+      console.error('Navigation error:', chrome.runtime.lastError);
+    }
+  });
 }
 
 function updateSpeed(e) {
@@ -123,7 +127,13 @@ function updateSpeed(e) {
   
   // Update active reading if any
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-    chrome.tabs.sendMessage(tab.id, { action: 'updateSpeed', speed: parseFloat(speed) });
+    if (tab) {
+      chrome.tabs.sendMessage(tab.id, { action: 'updateSpeed', speed: parseFloat(speed) }, () => {
+        if (chrome.runtime.lastError) {
+          // Ignore error if content script not loaded
+        }
+      });
+    }
   });
 }
 
