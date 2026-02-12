@@ -1,5 +1,6 @@
 /* Puter TTS Integration for LexiFlow */
 /* Uses puter.ai.txt2speech() for high-quality neural voices */
+/* Configured for audiobook-style narration */
 
 class PuterTTS {
   constructor() {
@@ -9,22 +10,32 @@ class PuterTTS {
     this.onEndCallback = null;
     
     // Available voices for Puter TTS (AWS Polly neural voices)
+    // Selected for audiobook/narration quality
     this.voices = [
-      { id: 'Joanna', name: 'Joanna (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
-      { id: 'Matthew', name: 'Matthew (US Male)', locale: 'en-US', gender: 'Male', engine: 'neural' },
-      { id: 'Ivy', name: 'Ivy (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
-      { id: 'Joey', name: 'Joey (US Male)', locale: 'en-US', gender: 'Male', engine: 'neural' },
-      { id: 'Kendra', name: 'Kendra (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
-      { id: 'Kimberly', name: 'Kimberly (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
-      { id: 'Salli', name: 'Salli (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
-      { id: 'Kevin', name: 'Kevin (US Male)', locale: 'en-US', gender: 'Male', engine: 'neural' },
-      { id: 'Ruth', name: 'Ruth (US Female)', locale: 'en-US', gender: 'Female', engine: 'neural' },
-      { id: 'Stephen', name: 'Stephen (US Male)', locale: 'en-US', gender: 'Male', engine: 'neural' },
-      { id: 'Amy', name: 'Amy (UK Female)', locale: 'en-GB', gender: 'Female', engine: 'neural' },
-      { id: 'Brian', name: 'Brian (UK Male)', locale: 'en-GB', gender: 'Male', engine: 'neural' },
-      { id: 'Emma', name: 'Emma (UK Female)', locale: 'en-GB', gender: 'Female', engine: 'neural' },
-      { id: 'Arthur', name: 'Arthur (UK Male)', locale: 'en-GB', gender: 'Male', engine: 'neural' },
-      { id: 'Olivia', name: 'Olivia (AU Female)', locale: 'en-AU', gender: 'Female', engine: 'neural' },
+      // Best for Audiobook Narration
+      { id: 'Joanna', name: 'Joanna (Narrator)', locale: 'en-US', gender: 'Female', style: 'narration' },
+      { id: 'Matthew', name: 'Matthew (Narrator)', locale: 'en-US', gender: 'Male', style: 'narration' },
+      { id: 'Ruth', name: 'Ruth (Storyteller)', locale: 'en-US', gender: 'Female', style: 'narration' },
+      { id: 'Stephen', name: 'Stephen (Storyteller)', locale: 'en-US', gender: 'Male', style: 'narration' },
+      
+      // Clear & Professional
+      { id: 'Kendra', name: 'Kendra (Clear)', locale: 'en-US', gender: 'Female', style: 'professional' },
+      { id: 'Joey', name: 'Joey (Clear)', locale: 'en-US', gender: 'Male', style: 'professional' },
+      { id: 'Salli', name: 'Salli (Professional)', locale: 'en-US', gender: 'Female', style: 'professional' },
+      { id: 'Kevin', name: 'Kevin (Professional)', locale: 'en-US', gender: 'Male', style: 'professional' },
+      
+      // Friendly & Engaging
+      { id: 'Ivy', name: 'Ivy (Friendly)', locale: 'en-US', gender: 'Female', style: 'friendly' },
+      { id: 'Kimberly', name: 'Kimberly (Warm)', locale: 'en-US', gender: 'Female', style: 'friendly' },
+      
+      // UK English - Great for documentation
+      { id: 'Amy', name: 'Amy (UK Narrator)', locale: 'en-GB', gender: 'Female', style: 'narration' },
+      { id: 'Brian', name: 'Brian (UK Narrator)', locale: 'en-GB', gender: 'Male', style: 'narration' },
+      { id: 'Emma', name: 'Emma (UK Clear)', locale: 'en-GB', gender: 'Female', style: 'professional' },
+      { id: 'Arthur', name: 'Arthur (UK Deep)', locale: 'en-GB', gender: 'Male', style: 'narration' },
+      
+      // Australian
+      { id: 'Olivia', name: 'Olivia (AU)', locale: 'en-AU', gender: 'Female', style: 'professional' },
     ];
   }
 
@@ -34,7 +45,6 @@ class PuterTTS {
     if (this.loadPromise) return this.loadPromise;
     
     this.loadPromise = new Promise((resolve, reject) => {
-      // Check if already loaded
       if (typeof puter !== 'undefined' && puter.ai && puter.ai.txt2speech) {
         this.loaded = true;
         console.log('[PuterTTS] Library already loaded');
@@ -47,7 +57,6 @@ class PuterTTS {
       script.async = true;
       
       script.onload = () => {
-        // Wait a bit for puter to initialize
         const checkPuter = () => {
           if (typeof puter !== 'undefined' && puter.ai) {
             console.log('[PuterTTS] Library loaded successfully');
@@ -76,6 +85,11 @@ class PuterTTS {
     return this.voices;
   }
 
+  // Get voices by style
+  getVoicesByStyle(style) {
+    return this.voices.filter(v => v.style === style);
+  }
+
   // Speak text and return audio element for control
   async speak(text, voiceId = 'Joanna', rate = 1.0, onEnd = null) {
     try {
@@ -90,19 +104,18 @@ class PuterTTS {
       // Stop any current audio
       this.stop();
       
-      // Call Puter TTS API
+      // Call Puter TTS API with neural engine for best quality
       const audio = await puter.ai.txt2speech(text, {
         voice: voiceId,
-        engine: 'neural'
+        engine: 'neural'  // Neural engine provides audiobook-quality voices
       });
       
       this.currentAudio = audio;
       this.onEndCallback = onEnd;
       
-      // Set playback rate
+      // Set playback rate (0.85-0.95 is ideal for audiobook listening)
       audio.playbackRate = rate;
       
-      // Set up event handlers
       audio.onended = () => {
         console.log('[PuterTTS] Audio ended');
         if (this.onEndCallback) {
@@ -114,7 +127,6 @@ class PuterTTS {
         console.error('[PuterTTS] Audio error:', e);
       };
       
-      // Play the audio
       await audio.play();
       console.log('[PuterTTS] Playback started');
       
@@ -166,7 +178,7 @@ class PuterTTS {
     return this.currentAudio && !this.currentAudio.paused;
   }
 
-  // Check if Puter.js is available and working
+  // Check if Puter.js is available
   async isAvailable() {
     try {
       await this.load();
