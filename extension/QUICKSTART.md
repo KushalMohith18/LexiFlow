@@ -1,14 +1,22 @@
 # 🚀 LexiFlow Extension - Quick Start Guide
 
+## ✅ What's New (v1.1)
+
+- **High-Quality TTS**: New Puter.js integration provides neural-quality voices
+- **Improved UI**: Better floating controls with smooth animations
+- **Click-to-Start**: Click any sentence to begin reading from there
+- **Auto-scroll**: Keeps the current sentence at eye level
+
 ## ✅ Pre-Installation Checklist
 
 All files ready:
 - ✅ manifest.json
 - ✅ popup/ (HTML + JS)
-- ✅ content/ (injection script)
+- ✅ content/ (injection script with Puter TTS)
 - ✅ background/ (service worker)
 - ✅ icons/ (16px, 48px, 128px PNG)
 - ✅ test.html (local test page)
+- ✅ test-puter-tts.html (TTS test page)
 
 ---
 
