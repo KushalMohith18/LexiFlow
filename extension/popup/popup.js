@@ -7,6 +7,13 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Get current tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
+  // Check if tab URL is valid for content scripts
+  if (!tab || !tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+    document.getElementById('statusText').textContent = 'Cannot run on this page (browser internal page)';
+    document.getElementById('playBtn').disabled = true;
+    return;
+  }
+  
   // Load saved settings
   chrome.storage.sync.get(['speed', 'voice'], (result) => {
     if (result.speed) {
@@ -18,12 +25,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load voices
   loadVoices();
 
-  // Check if reading is active on this page
-  chrome.tabs.sendMessage(tab.id, { action: 'getStatus' }, (response) => {
-    if (response) {
-      updateStatus(response);
-    }
-  });
+  // Check if reading is active on this page (with error handling)
+  try {
+    chrome.tabs.sendMessage(tab.id, { action: 'getStatus' }, (response) => {
+      if (chrome.runtime.lastError) {
+        // Content script not loaded yet, that's ok
+        console.log('Content script not loaded yet');
+        return;
+      }
+      if (response) {
+        updateStatus(response);
+      }
+    });
+  } catch (error) {
+    console.log('Error checking status:', error);
+  }
 
   // Event listeners
   document.getElementById('playBtn').addEventListener('click', togglePlay);
