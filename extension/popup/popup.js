@@ -55,58 +55,110 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('ttsProvider').addEventListener('change', changeTTSProvider);
 });
 
-function loadVoices() {
+async function loadVoices() {
   const voiceSelect = document.getElementById('voiceSelect');
-  const voices = speechSynthesis.getVoices();
+  const provider = document.getElementById('ttsProvider').value;
   
-  if (voices.length > 0) {
-    voiceSelect.innerHTML = '';
+  voiceSelect.innerHTML = '<option value="">Loading voices...</option>';
+  
+  if (provider === 'edge') {
+    // Load Edge TTS voices
+    try {
+      const response = await fetch(
+        'https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4'
+      );
+      const voices = await response.json();
+      edgeTTSVoices = voices;
+      
+      // Filter and sort English voices
+      const englishVoices = voices
+        .filter(v => v.Locale && v.Locale.startsWith('en'))
+        .sort((a, b) => {
+          // Prioritize Neural voices
+          const aNeural = a.ShortName?.includes('Neural') ? 1 : 0;
+          const bNeural = b.ShortName?.includes('Neural') ? 1 : 0;
+          if (aNeural !== bNeural) return bNeural - aNeural;
+          
+          // Prioritize US/GB/AU
+          const preferredLocales = ['en-US', 'en-GB', 'en-AU'];
+          const aLocale = preferredLocales.indexOf(a.Locale) !== -1 ? 1 : 0;
+          const bLocale = preferredLocales.indexOf(b.Locale) !== -1 ? 1 : 0;
+          if (aLocale !== bLocale) return bLocale - aLocale;
+          
+          return (a.FriendlyName || '').localeCompare(b.FriendlyName || '');
+        });
+      
+      voiceSelect.innerHTML = '';
+      englishVoices.forEach((voice, index) => {
+        const option = document.createElement('option');
+        option.value = voice.ShortName;
+        const isRecommended = voice.ShortName?.includes('Neural');
+        option.textContent = `${isRecommended ? '⭐ ' : ''}${voice.FriendlyName} (${voice.Locale})`;
+        if (index === 0) option.selected = true;
+        voiceSelect.appendChild(option);
+      });
+      
+      console.log('[LexiFlow] Loaded', englishVoices.length, 'Edge TTS voices');
+      
+    } catch (error) {
+      console.error('[LexiFlow] Failed to load Edge voices:', error);
+      voiceSelect.innerHTML = '<option value="">Failed to load Edge voices</option>';
+    }
     
-    // Sort voices by quality (prioritize natural/premium voices)
-    const sortedVoices = voices.sort((a, b) => {
-      // Prioritize voices with these keywords (usually better quality)
-      const qualityKeywords = ['enhanced', 'premium', 'natural', 'neural', 'google', 'microsoft'];
-      const aScore = qualityKeywords.some(k => a.name.toLowerCase().includes(k)) ? 1 : 0;
-      const bScore = qualityKeywords.some(k => b.name.toLowerCase().includes(k)) ? 1 : 0;
-      
-      if (aScore !== bScore) return bScore - aScore;
-      
-      // Prefer English voices
-      if (a.lang.startsWith('en') && !b.lang.startsWith('en')) return -1;
-      if (!a.lang.startsWith('en') && b.lang.startsWith('en')) return 1;
-      
-      return a.name.localeCompare(b.name);
-    });
-    
-    sortedVoices.forEach((voice, index) => {
-      const option = document.createElement('option');
-      option.value = index;
-      
-      // Mark recommended voices
-      const isRecommended = voice.name.toLowerCase().includes('enhanced') || 
-                           voice.name.toLowerCase().includes('premium') ||
-                           voice.name.toLowerCase().includes('natural') ||
-                           voice.name.toLowerCase().includes('neural') ||
-                           (voice.name.toLowerCase().includes('google') && voice.lang.startsWith('en'));
-      
-      option.textContent = `${isRecommended ? '⭐ ' : ''}${voice.name} (${voice.lang})`;
-      
-      // Set default to first recommended voice
-      if (isRecommended && voiceSelect.children.length === 0) {
-        option.selected = true;
-      }
-      
-      voiceSelect.appendChild(option);
-    });
-    
-    // Save the sorted voice indices mapping
-    window.lexiflowVoices = sortedVoices;
   } else {
-    // Voices may not be loaded yet, try again
-    speechSynthesis.addEventListener('voiceschanged', () => {
-      loadVoices();
-    });
+    // Load Browser TTS voices
+    const voices = speechSynthesis.getVoices();
+    
+    if (voices.length > 0) {
+      const sortedVoices = voices.sort((a, b) => {
+        const qualityKeywords = ['enhanced', 'premium', 'natural', 'neural', 'google', 'microsoft'];
+        const aScore = qualityKeywords.some(k => a.name.toLowerCase().includes(k)) ? 1 : 0;
+        const bScore = qualityKeywords.some(k => b.name.toLowerCase().includes(k)) ? 1 : 0;
+        
+        if (aScore !== bScore) return bScore - aScore;
+        if (a.lang.startsWith('en') && !b.lang.startsWith('en')) return -1;
+        if (!a.lang.startsWith('en') && b.lang.startsWith('en')) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      
+      voiceSelect.innerHTML = '';
+      sortedVoices.forEach((voice, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        const isRecommended = ['enhanced', 'premium', 'natural', 'neural'].some(k => 
+          voice.name.toLowerCase().includes(k)
+        );
+        option.textContent = `${isRecommended ? '⭐ ' : ''}${voice.name} (${voice.lang})`;
+        voiceSelect.appendChild(option);
+      });
+      
+      window.lexiflowVoices = sortedVoices;
+    } else {
+      speechSynthesis.addEventListener('voiceschanged', () => {
+        loadVoices();
+      });
+    }
   }
+}
+
+async function changeTTSProvider(e) {
+  currentProvider = e.target.value;
+  chrome.storage.sync.set({ ttsProvider: currentProvider });
+  await loadVoices();
+  
+  // Notify content script to change provider
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (tab) {
+      chrome.tabs.sendMessage(tab.id, { 
+        action: 'changeProvider',
+        provider: currentProvider
+      }, () => {
+        if (chrome.runtime.lastError) {
+          console.log('Could not change provider in content script');
+        }
+      });
+    }
+  });
 }
 
 async function togglePlay() {
