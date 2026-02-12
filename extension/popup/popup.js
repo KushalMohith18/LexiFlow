@@ -56,12 +56,46 @@ function loadVoices() {
   
   if (voices.length > 0) {
     voiceSelect.innerHTML = '';
-    voices.forEach((voice, index) => {
+    
+    // Sort voices by quality (prioritize natural/premium voices)
+    const sortedVoices = voices.sort((a, b) => {
+      // Prioritize voices with these keywords (usually better quality)
+      const qualityKeywords = ['enhanced', 'premium', 'natural', 'neural', 'google', 'microsoft'];
+      const aScore = qualityKeywords.some(k => a.name.toLowerCase().includes(k)) ? 1 : 0;
+      const bScore = qualityKeywords.some(k => b.name.toLowerCase().includes(k)) ? 1 : 0;
+      
+      if (aScore !== bScore) return bScore - aScore;
+      
+      // Prefer English voices
+      if (a.lang.startsWith('en') && !b.lang.startsWith('en')) return -1;
+      if (!a.lang.startsWith('en') && b.lang.startsWith('en')) return 1;
+      
+      return a.name.localeCompare(b.name);
+    });
+    
+    sortedVoices.forEach((voice, index) => {
       const option = document.createElement('option');
       option.value = index;
-      option.textContent = `${voice.name} (${voice.lang})`;
+      
+      // Mark recommended voices
+      const isRecommended = voice.name.toLowerCase().includes('enhanced') || 
+                           voice.name.toLowerCase().includes('premium') ||
+                           voice.name.toLowerCase().includes('natural') ||
+                           voice.name.toLowerCase().includes('neural') ||
+                           (voice.name.toLowerCase().includes('google') && voice.lang.startsWith('en'));
+      
+      option.textContent = `${isRecommended ? '⭐ ' : ''}${voice.name} (${voice.lang})`;
+      
+      // Set default to first recommended voice
+      if (isRecommended && voiceSelect.children.length === 0) {
+        option.selected = true;
+      }
+      
       voiceSelect.appendChild(option);
     });
+    
+    // Save the sorted voice indices mapping
+    window.lexiflowVoices = sortedVoices;
   } else {
     // Voices may not be loaded yet, try again
     speechSynthesis.addEventListener('voiceschanged', () => {
