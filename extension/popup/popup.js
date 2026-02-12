@@ -1,6 +1,8 @@
 let isPlaying = false;
 let currentSentenceIndex = 0;
 let totalSentences = 0;
+let edgeTTSVoices = [];
+let currentProvider = 'edge';
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
@@ -15,21 +17,24 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   
   // Load saved settings
-  chrome.storage.sync.get(['speed', 'voice'], (result) => {
+  chrome.storage.sync.get(['speed', 'voice', 'ttsProvider'], (result) => {
     if (result.speed) {
       document.getElementById('speedSlider').value = result.speed;
       document.getElementById('speedValue').textContent = result.speed + 'x';
     }
+    if (result.ttsProvider) {
+      currentProvider = result.ttsProvider;
+      document.getElementById('ttsProvider').value = result.ttsProvider;
+    }
   });
 
-  // Load voices
-  loadVoices();
+  // Load voices based on provider
+  await loadVoices();
 
-  // Check if reading is active on this page (with error handling)
+  // Check if reading is active on this page
   try {
     chrome.tabs.sendMessage(tab.id, { action: 'getStatus' }, (response) => {
       if (chrome.runtime.lastError) {
-        // Content script not loaded yet, that's ok
         console.log('Content script not loaded yet');
         return;
       }
@@ -47,7 +52,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('nextBtn').addEventListener('click', () => navigate('next'));
   document.getElementById('speedSlider').addEventListener('input', updateSpeed);
   document.getElementById('voiceSelect').addEventListener('change', updateVoice);
-  document.getElementById('chatBtn').addEventListener('click', openChat);
+  document.getElementById('ttsProvider').addEventListener('change', changeTTSProvider);
 });
 
 function loadVoices() {
