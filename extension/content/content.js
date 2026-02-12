@@ -152,13 +152,18 @@ function removeHighlight() {
 
 // Speak a sentence using browser TTS
 function speakSentence(index, speed = 1.0, voiceIndex = 0) {
+  console.log('[LexiFlow] Speaking sentence', index + 1, 'of', sentences.length);
+  
   if (index >= sentences.length) {
     // Reached end
+    console.log('[LexiFlow] Reached end of document');
     stopReading();
     return;
   }
 
   currentSentenceIndex = index;
+  currentSpeed = speed;
+  currentVoice = voiceIndex;
   const text = sentences[index];
 
   // Stop any current speech
@@ -176,7 +181,12 @@ function speakSentence(index, speed = 1.0, voiceIndex = 0) {
     utterance.voice = voices[voiceIndex];
   }
 
+  utterance.onstart = () => {
+    console.log('[LexiFlow] Started speaking');
+  };
+
   utterance.onend = () => {
+    console.log('[LexiFlow] Finished speaking');
     if (isPlaying) {
       // Auto-advance to next sentence
       setTimeout(() => {
@@ -186,10 +196,15 @@ function speakSentence(index, speed = 1.0, voiceIndex = 0) {
   };
 
   utterance.onerror = (e) => {
-    console.error('LexiFlow TTS error:', e);
+    console.error('[LexiFlow] TTS error:', e);
   };
 
-  speechSynthesis.speak(utterance);
+  try {
+    speechSynthesis.speak(utterance);
+    console.log('[LexiFlow] Speech started');
+  } catch (error) {
+    console.error('[LexiFlow] Failed to speak:', error);
+  }
   
   // Update popup
   sendStatusUpdate();
