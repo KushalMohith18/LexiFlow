@@ -9,8 +9,8 @@
       box-sizing: border-box;
     }
     body {
-      width: 380px;
-      min-height: 500px;
+      width: 400px;
+      min-height: 520px;
       background: #0a0a0a;
       color: #fafafa;
       font-family: system-ui, -apple-system, sans-serif;
@@ -21,16 +21,21 @@
       margin-bottom: 24px;
     }
     .header h1 {
-      font-size: 24px;
+      font-size: 26px;
       font-weight: 700;
       background: linear-gradient(135deg, #6D28D9 0%, #00F0FF 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
     .header p {
       font-size: 13px;
       color: #888;
+    }
+    .header .version {
+      font-size: 10px;
+      color: #555;
+      margin-top: 4px;
     }
     .status {
       background: #1a1a1a;
@@ -47,6 +52,12 @@
     .status-active {
       color: #00F0FF;
       font-weight: 600;
+    }
+    .tip {
+      font-size: 11px;
+      color: #666;
+      margin-top: 8px;
+      line-height: 1.4;
     }
     .controls {
       display: flex;
@@ -72,6 +83,10 @@
     button:active {
       transform: scale(0.95);
     }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     .play-btn {
       background: #6D28D9;
       border: none;
@@ -79,7 +94,7 @@
       font-weight: 600;
       flex: 1;
     }
-    .play-btn:hover {
+    .play-btn:hover:not(:disabled) {
       background: #7D38E9;
     }
     .play-btn svg {
@@ -176,34 +191,48 @@
       width: 0%;
       transition: width 0.3s;
     }
-    .chat-btn {
-      width: 100%;
-      background: #1a1a1a;
-      border: 1px solid #6D28D9;
-      color: #6D28D9;
-      padding: 12px;
-      border-radius: 10px;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 600;
-      transition: all 0.2s;
+    .provider-badge {
+      display: inline-block;
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+      vertical-align: middle;
     }
-    .chat-btn:hover {
-      background: #6D28D9;
-      color: #fafafa;
+    .provider-badge.premium {
+      background: linear-gradient(135deg, #6D28D9, #8B5CF6);
+      color: white;
+    }
+    .provider-badge.indian {
+      background: linear-gradient(135deg, #FF6B35, #F7931E);
+      color: white;
+    }
+    .provider-badge.offline {
+      background: #444;
+      color: #aaa;
+    }
+    .instant-badge {
+      display: inline-block;
+      font-size: 9px;
+      padding: 2px 5px;
+      border-radius: 3px;
+      background: rgba(0, 240, 255, 0.2);
+      color: #00F0FF;
+      margin-left: 4px;
     }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>LexiFlow</h1>
-    <p>Documentation Reader</p>
+    <p>Audiobook-Style Documentation Reader</p>
+    <div class="version">v2.0 • Multi-Provider TTS</div>
   </div>
 
   <div class="status" id="status">
     <div class="status-text" id="statusText">Ready to read this page</div>
-    <div style="font-size: 11px; color: #666; margin-top: 8px;">
-      💡 Tip: Click any text on the page to start from that sentence
+    <div class="tip">
+      💡 Click any text on the page to start from that sentence
     </div>
   </div>
 
@@ -222,15 +251,22 @@
 
   <div class="settings">
     <div class="setting-group">
-      <label class="setting-label">TTS Provider</label>
+      <label class="setting-label">
+        TTS Provider
+        <span class="instant-badge">Real-time switch</span>
+      </label>
       <select id="ttsProvider" class="setting-select">
-        <option value="puter">High Quality TTS ⭐</option>
-        <option value="browser">Browser TTS (Offline)</option>
+        <option value="puter">🎙️ Puter TTS (Neural) ⭐</option>
+        <option value="sarvam">🇮🇳 Sarvam AI (Indian Neural)</option>
+        <option value="browser">💻 Browser TTS (Offline)</option>
       </select>
     </div>
     
     <div class="setting-group">
-      <label class="setting-label">Voice</label>
+      <label class="setting-label">
+        Voice
+        <span class="instant-badge">Seamless change</span>
+      </label>
       <select id="voiceSelect" class="setting-select">
         <option value="">Loading voices...</option>
       </select>
@@ -239,6 +275,7 @@
     <div class="setting-group">
       <label class="setting-label">
         Reading Speed: <span class="speed-value" id="speedValue">1.0x</span>
+        <span class="instant-badge">Live adjust</span>
       </label>
       <input type="range" id="speedSlider" min="0.5" max="2.5" step="0.1" value="1" class="speed-slider">
       <div class="speed-marks">
